@@ -1,0 +1,87 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+enum ServiceType {
+  TAXI
+  BIKE
+  DELIVERY
+}
+
+enum VehicleType {
+  CAR4
+  CAR6
+  PREMIUM
+}
+
+enum BookingStatus {
+  PENDING
+  ACCEPTED
+  ONGOING
+  COMPLETED
+  CANCELLED
+}
+
+model User {
+  id        String    @id @default(cuid())
+  name      String
+  email     String    @unique
+  password  String
+  phone     String?
+  role      UserRole  @default(USER)
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  bookings  Booking[]
+}
+
+model Booking {
+  id                 String        @id @default(cuid())
+  userId             String?
+  user               User?         @relation(fields: [userId], references: [id])
+  serviceType        ServiceType
+  vehicleType        VehicleType?
+  pickupAddress      String
+  destinationAddress String
+  distanceKm         Float
+  baseFare           Int
+  perKm              Int
+  minimumFare        Int
+  calculatedPrice    Int
+  finalPrice         Int
+  etaMinutes         Int
+  status             BookingStatus @default(PENDING)
+  note               String?
+  paymentMethod      String        @default("CASH")
+  cancelReason       String?
+  isScheduled        Boolean       @default(false)
+  scheduledAt        DateTime?
+  driverName         String?
+  driverPhone        String?
+  vehicleName        String?
+  plateNumber        String?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+}
+
+model PricingRule {
+  id          String   @id @default(cuid())
+  section     String
+  key         String   @unique
+  label       String
+  baseFare    Int
+  perKm       Int
+  minimumFare Int
+  etaBase     Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
