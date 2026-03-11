@@ -599,7 +599,7 @@ export default function AdminBookings() {
   }
 
   return (
-    <section>
+    <section style={{ minWidth: 0 }}>
       {errorMessage && (
         <div
           style={{
@@ -822,7 +822,7 @@ export default function AdminBookings() {
               height: "18px",
             }}
           >
-            <div style={{ height: "1px", width: "4200px" }} />
+            <div style={{ height: "1px", width: "3200px" }} />
           </div>
 
           <div
@@ -831,16 +831,20 @@ export default function AdminBookings() {
             className="card-dark"
             style={{
               padding: 0,
-              overflow: "auto",
+              overflowX: "auto",
+              overflowY: "auto",
               borderRadius: "20px",
               maxHeight: "70vh",
+              width: "100%",
+              maxWidth: "100%",
+
             }}
           >
             <table
               ref={tableRef}
               style={{
                 width: "100%",
-                minWidth: "4200px",
+                minWidth: "2800px",
                 borderCollapse: "separate",
                 borderSpacing: 0,
                 color: "#ffffff",

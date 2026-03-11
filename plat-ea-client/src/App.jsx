@@ -64,6 +64,8 @@ function AdminLayout({ title, description, children }) {
         backgroundColor: "#0b0b0b",
         color: "#ffffff",
         fontFamily: "Inter, Arial, sans-serif",
+        overflowX: "hidden",
+
       }}
     >
       <header
@@ -115,7 +117,7 @@ function AdminLayout({ title, description, children }) {
         </div>
       </header>
 
-      <main style={{ maxWidth: "1400px", margin: "0 auto", padding: "24px 20px 60px" }}>
+      <main style={{ maxWidth: "100%", margin: "0 auto", padding: "24px 20px 60px" }}>
         <div
           style={{
             display: "grid",
