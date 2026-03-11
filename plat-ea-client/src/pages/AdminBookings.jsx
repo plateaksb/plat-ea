@@ -14,13 +14,14 @@ export default function AdminBookings() {
   const { token } = useAuth();
 
   const [bookings, setBookings] = useState([]);
+  const [drivers, setDrivers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [updatingBookingId, setUpdatingBookingId] = useState("");
-  const [savingDriverId, setSavingDriverId] = useState("");
+  const [assigningDriverId, setAssigningDriverId] = useState("");
   const [bookingStatusDrafts, setBookingStatusDrafts] = useState({});
-  const [driverDrafts, setDriverDrafts] = useState({});
+  const [driverAssignDrafts, setDriverAssignDrafts] = useState({});
 
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [dateFilter, setDateFilter] = useState("");
@@ -52,17 +53,6 @@ export default function AdminBookings() {
     verticalAlign: "top",
     fontSize: "14px",
     borderTop: "1px solid rgba(255,255,255,0.08)",
-  };
-
-  const driverInputStyle = {
-    width: "100%",
-    padding: "9px 10px",
-    borderRadius: "10px",
-    border: "1px solid rgba(255,255,255,0.12)",
-    backgroundColor: "rgba(255,255,255,0.04)",
-    color: "#ffffff",
-    fontSize: "13px",
-    outline: "none",
   };
 
   function paymentLabel(method) {
@@ -235,6 +225,22 @@ export default function AdminBookings() {
     syncScroll(bottomScrollRef.current, topScrollRef.current);
   }
 
+  async function fetchDrivers() {
+    const response = await fetch(buildApiUrl("/admin/drivers"), {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      throw new Error(result.message || "Gagal mengambil data driver");
+    }
+
+    setDrivers(result.data);
+  }
+
   async function fetchBookings() {
     try {
       setLoading(true);
@@ -255,20 +261,15 @@ export default function AdminBookings() {
       setBookings(result.data);
 
       const statusDrafts = {};
-      const nextDriverDrafts = {};
+      const nextDriverAssignDrafts = {};
 
       for (const booking of result.data) {
         statusDrafts[booking.id] = booking.status;
-        nextDriverDrafts[booking.id] = {
-          driverName: booking.driverName || "",
-          driverPhone: booking.driverPhone || "",
-          vehicleName: booking.vehicleName || "",
-          plateNumber: booking.plateNumber || "",
-        };
+        nextDriverAssignDrafts[booking.id] = booking.driverId || "";
       }
 
       setBookingStatusDrafts(statusDrafts);
-      setDriverDrafts(nextDriverDrafts);
+      setDriverAssignDrafts(nextDriverAssignDrafts);
     } catch (error) {
       setErrorMessage(error.message || "Terjadi kesalahan saat memuat booking");
     } finally {
@@ -276,8 +277,19 @@ export default function AdminBookings() {
     }
   }
 
+  async function refreshAll() {
+    try {
+      setErrorMessage("");
+      await Promise.all([fetchBookings(), fetchDrivers()]);
+    } catch (error) {
+      setErrorMessage(error.message || "Gagal memuat ulang data");
+    }
+  }
+
   useEffect(() => {
-    if (token) fetchBookings();
+    if (token) {
+      refreshAll();
+    }
   }, [token]);
 
   useEffect(() => {
@@ -292,7 +304,7 @@ export default function AdminBookings() {
     updateTopScrollerWidth();
     window.addEventListener("resize", updateTopScrollerWidth);
     return () => window.removeEventListener("resize", updateTopScrollerWidth);
-  }, [bookings, statusFilter, dateFilter, typeFilter, searchTerm, sortBy]);
+  }, [bookings, drivers, statusFilter, dateFilter, typeFilter, searchTerm, sortBy]);
 
   function handleBookingStatusChange(bookingId, status) {
     setBookingStatusDrafts((prev) => ({
@@ -346,50 +358,43 @@ export default function AdminBookings() {
 
       setSuccessMessage(`Status booking ${bookingId} berhasil diperbarui.`);
     } catch (error) {
-      setErrorMessage(
-        error.message || "Terjadi kesalahan saat memperbarui status"
-      );
+      setErrorMessage(error.message || "Terjadi kesalahan saat memperbarui status");
     } finally {
       setUpdatingBookingId("");
     }
   }
 
-  function handleDriverDraftChange(bookingId, field, value) {
-    setDriverDrafts((prev) => ({
+  function handleDriverAssignDraftChange(bookingId, value) {
+    setDriverAssignDrafts((prev) => ({
       ...prev,
-      [bookingId]: {
-        ...prev[bookingId],
-        [field]: value,
-      },
+      [bookingId]: value,
     }));
   }
 
-  async function handleSaveDriver(bookingId) {
+  async function handleAssignDriver(bookingId) {
     try {
-      setSavingDriverId(bookingId);
+      setAssigningDriverId(bookingId);
       setErrorMessage("");
       setSuccessMessage("");
 
-      const draft = driverDrafts[bookingId] || {
-        driverName: "",
-        driverPhone: "",
-        vehicleName: "",
-        plateNumber: "",
-      };
+      const driverId = driverAssignDrafts[bookingId] || null;
 
-      const response = await fetch(buildApiUrl(`/bookings/${bookingId}/driver`), {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(draft),
-      });
+      const response = await fetch(
+        buildApiUrl(`/bookings/${bookingId}/assign-driver`),
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ driverId }),
+        }
+      );
 
       const result = await response.json();
 
       if (!response.ok) {
-        throw new Error(result.message || "Gagal menyimpan data driver");
+        throw new Error(result.message || "Gagal assign driver");
       }
 
       setBookings((prev) =>
@@ -397,6 +402,7 @@ export default function AdminBookings() {
           booking.id === bookingId
             ? {
                 ...booking,
+                driverId: result.data.driverId,
                 driverName: result.data.driverName,
                 driverPhone: result.data.driverPhone,
                 vehicleName: result.data.vehicleName,
@@ -407,23 +413,11 @@ export default function AdminBookings() {
         )
       );
 
-      setDriverDrafts((prev) => ({
-        ...prev,
-        [bookingId]: {
-          driverName: result.data.driverName || "",
-          driverPhone: result.data.driverPhone || "",
-          vehicleName: result.data.vehicleName || "",
-          plateNumber: result.data.plateNumber || "",
-        },
-      }));
-
-      setSuccessMessage(`Data driver booking ${bookingId} berhasil disimpan.`);
+      setSuccessMessage(result.message || "Driver berhasil ditugaskan.");
     } catch (error) {
-      setErrorMessage(
-        error.message || "Terjadi kesalahan saat menyimpan driver"
-      );
+      setErrorMessage(error.message || "Gagal assign driver");
     } finally {
-      setSavingDriverId("");
+      setAssigningDriverId("");
     }
   }
 
@@ -652,7 +646,7 @@ export default function AdminBookings() {
       >
         <h2 style={{ margin: 0 }}>Daftar Booking Masuk</h2>
 
-        <button type="button" className="btn-secondary" onClick={fetchBookings}>
+        <button type="button" className="btn-secondary" onClick={refreshAll}>
           Refresh Data
         </button>
       </div>
@@ -803,11 +797,7 @@ export default function AdminBookings() {
             <strong>{bookings.length}</strong> booking
           </div>
 
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={handleResetFilters}
-          >
+          <button type="button" className="btn-secondary" onClick={handleResetFilters}>
             Reset Filter
           </button>
         </div>
@@ -868,59 +858,34 @@ export default function AdminBookings() {
                   <th style={{ ...thStyle, minWidth: "130px" }}>Jarak</th>
                   <th style={{ ...thStyle, minWidth: "160px" }}>Harga</th>
                   <th style={{ ...thStyle, minWidth: "150px" }}>Pembayaran</th>
-                  <th style={{ ...thStyle, minWidth: "150px" }}>
-                    Jenis Booking
-                  </th>
-                  <th style={{ ...thStyle, minWidth: "240px" }}>
-                    Jadwal Pickup
-                  </th>
+                  <th style={{ ...thStyle, minWidth: "150px" }}>Jenis Booking</th>
+                  <th style={{ ...thStyle, minWidth: "240px" }}>Jadwal Pickup</th>
                   <th style={{ ...thStyle, minWidth: "160px" }}>Driver</th>
                   <th style={{ ...thStyle, minWidth: "160px" }}>No. Driver</th>
                   <th style={{ ...thStyle, minWidth: "160px" }}>Kendaraan</th>
                   <th style={{ ...thStyle, minWidth: "150px" }}>Plat Nomor</th>
-                  <th style={{ ...thStyle, minWidth: "300px" }}>
-                    Atur Driver
-                  </th>
+                  <th style={{ ...thStyle, minWidth: "300px" }}>Assign Driver</th>
                   <th style={{ ...thStyle, minWidth: "260px" }}>Catatan</th>
-                  <th style={{ ...thStyle, minWidth: "260px" }}>
-                    Alasan Batal
-                  </th>
+                  <th style={{ ...thStyle, minWidth: "260px" }}>Alasan Batal</th>
                   <th style={{ ...thStyle, minWidth: "140px" }}>Status</th>
-                  <th style={{ ...thStyle, minWidth: "180px" }}>
-                    Konfirmasi WA
-                  </th>
-                  <th style={{ ...thStyle, minWidth: "220px" }}>
-                    Aksi Cepat
-                  </th>
-                  <th style={{ ...thStyle, minWidth: "220px" }}>
-                    Ubah Status
-                  </th>
+                  <th style={{ ...thStyle, minWidth: "180px" }}>Konfirmasi WA</th>
+                  <th style={{ ...thStyle, minWidth: "220px" }}>Aksi Cepat</th>
+                  <th style={{ ...thStyle, minWidth: "220px" }}>Ubah Status</th>
                   <th style={{ ...thStyle, minWidth: "180px" }}>Dibuat</th>
-                  <th style={{ ...thStyle, minWidth: "180px" }}>
-                    Diperbarui
-                  </th>
+                  <th style={{ ...thStyle, minWidth: "180px" }}>Diperbarui</th>
                 </tr>
               </thead>
 
               <tbody>
                 {filteredBookings.map((booking) => {
                   const isUpdating = updatingBookingId === booking.id;
-                  const isSavingDriver = savingDriverId === booking.id;
+                  const isAssigningDriver = assigningDriverId === booking.id;
                   const hasPhone = Boolean(normalizePhoneToWa(booking.user?.phone));
-
-                  const driverDraft = driverDrafts[booking.id] || {
-                    driverName: "",
-                    driverPhone: "",
-                    vehicleName: "",
-                    plateNumber: "",
-                  };
 
                   return (
                     <tr key={booking.id}>
                       <td style={tdStyle}>
-                        <div
-                          style={{ maxWidth: "140px", wordBreak: "break-word" }}
-                        >
+                        <div style={{ maxWidth: "140px", wordBreak: "break-word" }}>
                           {booking.id}
                         </div>
                       </td>
@@ -956,17 +921,13 @@ export default function AdminBookings() {
                       </td>
 
                       <td style={tdStyle}>
-                        <div
-                          style={{ maxWidth: "280px", wordBreak: "break-word" }}
-                        >
+                        <div style={{ maxWidth: "280px", wordBreak: "break-word" }}>
                           {booking.pickup}
                         </div>
                       </td>
 
                       <td style={tdStyle}>
-                        <div
-                          style={{ maxWidth: "280px", wordBreak: "break-word" }}
-                        >
+                        <div style={{ maxWidth: "280px", wordBreak: "break-word" }}>
                           {booking.destination}
                         </div>
                       </td>
@@ -983,9 +944,7 @@ export default function AdminBookings() {
                         </div>
                       </td>
 
-                      <td style={tdStyle}>
-                        {paymentLabel(booking.paymentMethod)}
-                      </td>
+                      <td style={tdStyle}>{paymentLabel(booking.paymentMethod)}</td>
 
                       <td style={tdStyle}>
                         <span
@@ -1005,9 +964,7 @@ export default function AdminBookings() {
                         </span>
                       </td>
 
-                      <td style={tdStyle}>
-                        {formatScheduledAt(booking.scheduledAt)}
-                      </td>
+                      <td style={tdStyle}>{formatScheduledAt(booking.scheduledAt)}</td>
                       <td style={tdStyle}>{booking.driverName || "-"}</td>
                       <td style={tdStyle}>{booking.driverPhone || "-"}</td>
                       <td style={tdStyle}>{booking.vehicleName || "-"}</td>
@@ -1015,87 +972,42 @@ export default function AdminBookings() {
 
                       <td style={{ ...tdStyle, minWidth: "300px" }}>
                         <div style={{ display: "grid", gap: "8px" }}>
-                          <input
-                            type="text"
-                            placeholder="Nama driver"
-                            value={driverDraft.driverName}
+                          <select
+                            className="select-dark"
+                            value={driverAssignDrafts[booking.id] || ""}
                             onChange={(e) =>
-                              handleDriverDraftChange(
-                                booking.id,
-                                "driverName",
-                                e.target.value
-                              )
+                              handleDriverAssignDraftChange(booking.id, e.target.value)
                             }
-                            style={driverInputStyle}
-                          />
-                          <input
-                            type="text"
-                            placeholder="No. HP driver"
-                            value={driverDraft.driverPhone}
-                            onChange={(e) =>
-                              handleDriverDraftChange(
-                                booking.id,
-                                "driverPhone",
-                                e.target.value
-                              )
-                            }
-                            style={driverInputStyle}
-                          />
-                          <input
-                            type="text"
-                            placeholder="Nama kendaraan"
-                            value={driverDraft.vehicleName}
-                            onChange={(e) =>
-                              handleDriverDraftChange(
-                                booking.id,
-                                "vehicleName",
-                                e.target.value
-                              )
-                            }
-                            style={driverInputStyle}
-                          />
-                          <input
-                            type="text"
-                            placeholder="Plat nomor"
-                            value={driverDraft.plateNumber}
-                            onChange={(e) =>
-                              handleDriverDraftChange(
-                                booking.id,
-                                "plateNumber",
-                                e.target.value.toUpperCase()
-                              )
-                            }
-                            style={driverInputStyle}
-                          />
+                          >
+                            <option value="">-- Lepas driver --</option>
+                            {drivers.map((driver) => (
+                              <option key={driver.id} value={driver.id}>
+                                {driver.name} - {driver.vehicleName} - {driver.plateNumber}
+                                {driver.isActive ? "" : " (Nonaktif)"}
+                              </option>
+                            ))}
+                          </select>
+
                           <button
                             type="button"
                             className="btn-primary"
-                            onClick={() => handleSaveDriver(booking.id)}
-                            disabled={isSavingDriver}
-                            style={{
-                              width: "100%",
-                              opacity: isSavingDriver ? 0.7 : 1,
-                            }}
+                            onClick={() => handleAssignDriver(booking.id)}
+                            disabled={isAssigningDriver}
+                            style={{ width: "100%", opacity: isAssigningDriver ? 0.7 : 1 }}
                           >
-                            {isSavingDriver
-                              ? "Menyimpan Driver..."
-                              : "Simpan Driver"}
+                            {isAssigningDriver ? "Menyimpan Driver..." : "Simpan Driver"}
                           </button>
                         </div>
                       </td>
 
                       <td style={tdStyle}>
-                        <div
-                          style={{ maxWidth: "260px", wordBreak: "break-word" }}
-                        >
+                        <div style={{ maxWidth: "260px", wordBreak: "break-word" }}>
                           {booking.note || "-"}
                         </div>
                       </td>
 
                       <td style={tdStyle}>
-                        <div
-                          style={{ maxWidth: "260px", wordBreak: "break-word" }}
-                        >
+                        <div style={{ maxWidth: "260px", wordBreak: "break-word" }}>
                           {booking.cancelReason || "-"}
                         </div>
                       </td>
@@ -1119,35 +1031,18 @@ export default function AdminBookings() {
                       </td>
 
                       <td style={{ ...tdStyle, minWidth: "220px" }}>
-                        <div
-                          style={{
-                            display: "flex",
-                            gap: "8px",
-                            flexWrap: "wrap",
-                          }}
-                        >
+                        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                           {renderQuickActions(booking)}
                         </div>
                       </td>
 
                       <td style={{ ...tdStyle, minWidth: "220px" }}>
-                        <div
-                          style={{
-                            display: "grid",
-                            gap: "10px",
-                            minWidth: "200px",
-                          }}
-                        >
+                        <div style={{ display: "grid", gap: "10px", minWidth: "200px" }}>
                           <select
                             className="select-dark"
-                            value={
-                              bookingStatusDrafts[booking.id] || booking.status
-                            }
+                            value={bookingStatusDrafts[booking.id] || booking.status}
                             onChange={(e) =>
-                              handleBookingStatusChange(
-                                booking.id,
-                                e.target.value
-                              )
+                              handleBookingStatusChange(booking.id, e.target.value)
                             }
                           >
                             {bookingStatuses.map((status) => (
@@ -1162,10 +1057,7 @@ export default function AdminBookings() {
                             className="btn-primary"
                             onClick={() => handleSaveBookingStatus(booking.id)}
                             disabled={isUpdating}
-                            style={{
-                              width: "100%",
-                              opacity: isUpdating ? 0.7 : 1,
-                            }}
+                            style={{ width: "100%", opacity: isUpdating ? 0.7 : 1 }}
                           >
                             {isUpdating ? "Menyimpan..." : "Simpan Status"}
                           </button>

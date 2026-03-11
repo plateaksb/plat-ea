@@ -5,6 +5,7 @@ const cors = require("cors");
 const prisma = require("./lib/prisma");
 const authRoutes = require("./routes/authRoutes");
 const mapsRoutes = require("./routes/mapsRoutes");
+const driverRoutes = require("./routes/driverRoutes");
 const { requireAuth, requireAdmin } = require("./middlewares/auth");
 
 const app = express();
@@ -234,6 +235,7 @@ function formatBookingList(bookings) {
     cancelReason: booking.cancelReason,
     isScheduled: booking.isScheduled,
     scheduledAt: booking.scheduledAt,
+    driverId: booking.driverId,
     driverName: booking.driverName,
     driverPhone: booking.driverPhone,
     vehicleName: booking.vehicleName,
@@ -290,6 +292,7 @@ app.get("/api/health/db", async (req, res) => {
 
 app.use("/api/auth", authRoutes);
 app.use("/api/maps", mapsRoutes);
+app.use("/api", driverRoutes);
 
 app.get("/api/pricing", async (req, res) => {
   const pricingRules = await prisma.pricingRule.findMany({
@@ -432,6 +435,7 @@ app.post("/api/bookings", requireAuth, async (req, res) => {
       cancelReason: booking.cancelReason,
       isScheduled: booking.isScheduled,
       scheduledAt: booking.scheduledAt,
+      driverId: booking.driverId,
       driverName: booking.driverName,
       driverPhone: booking.driverPhone,
       vehicleName: booking.vehicleName,
