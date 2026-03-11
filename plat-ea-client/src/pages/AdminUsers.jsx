@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { buildApiUrl } from "../lib/api";
 
+const roleOptions = ["USER", "ADMIN"];
+
 export default function AdminUsers() {
   const { token } = useAuth();
 
@@ -9,10 +11,15 @@ export default function AdminUsers() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [roleFilter, setRoleFilter] = useState("ALL");
   const [sortBy, setSortBy] = useState("NEWEST");
   const [lastUpdated, setLastUpdated] = useState(null);
+  const [profileDrafts, setProfileDrafts] = useState({});
+  const [statusDrafts, setStatusDrafts] = useState({});
+  const [savingProfileId, setSavingProfileId] = useState("");
+  const [savingStatusId, setSavingStatusId] = useState("");
 
   function formatRupiah(value) {
     return new Intl.NumberFormat("id-ID", {
@@ -39,6 +46,7 @@ export default function AdminUsers() {
       }
 
       setErrorMessage("");
+      setSuccessMessage("");
 
       const response = await fetch(buildApiUrl("/admin/users"), {
         headers: {
@@ -54,6 +62,27 @@ export default function AdminUsers() {
 
       setUsers(result.data);
       setLastUpdated(new Date());
+
+      const nextProfileDrafts = {};
+      const nextStatusDrafts = {};
+
+      for (const user of result.data) {
+        nextProfileDrafts[user.id] = {
+          name: user.name || "",
+          email: user.email || "",
+          phone: user.phone || "",
+          role: user.role || "USER",
+        };
+
+        nextStatusDrafts[user.id] = {
+          isActive: Boolean(user.isActive),
+          isBlocked: Boolean(user.isBlocked),
+          blockedReason: user.blockedReason || "",
+        };
+      }
+
+      setProfileDrafts(nextProfileDrafts);
+      setStatusDrafts(nextStatusDrafts);
     } catch (error) {
       setErrorMessage(
         error.message || "Terjadi kesalahan saat mengambil daftar user"
@@ -74,16 +103,15 @@ export default function AdminUsers() {
     const totalUsers = users.length;
     const adminUsers = users.filter((user) => user.role === "ADMIN").length;
     const normalUsers = users.filter((user) => user.role !== "ADMIN").length;
-    const totalBookings = users.reduce(
-      (sum, user) => sum + Number(user.stats?.totalBookings || 0),
-      0
-    );
+    const inactiveUsers = users.filter((user) => !user.isActive).length;
+    const blockedUsers = users.filter((user) => user.isBlocked).length;
 
     return {
       totalUsers,
       adminUsers,
       normalUsers,
-      totalBookings,
+      inactiveUsers,
+      blockedUsers,
     };
   }, [users]);
 
@@ -95,9 +123,17 @@ export default function AdminUsers() {
     }
 
     const keyword = searchTerm.trim().toLowerCase();
+
     if (keyword) {
       result = result.filter((user) => {
-        const haystack = [user.id, user.name, user.email, user.phone, user.role]
+        const haystack = [
+          user.id,
+          user.name,
+          user.email,
+          user.phone,
+          user.role,
+          user.blockedReason,
+        ]
           .filter(Boolean)
           .join(" ")
           .toLowerCase();
@@ -130,6 +166,90 @@ export default function AdminUsers() {
     return sorted;
   }, [users, roleFilter, searchTerm, sortBy]);
 
+  function handleProfileDraftChange(userId, field, value) {
+    setProfileDrafts((prev) => ({
+      ...prev,
+      [userId]: {
+        ...prev[userId],
+        [field]: value,
+      },
+    }));
+  }
+
+  function handleStatusDraftChange(userId, field, value) {
+    setStatusDrafts((prev) => ({
+      ...prev,
+      [userId]: {
+        ...prev[userId],
+        [field]: value,
+      },
+    }));
+  }
+
+  async function handleSaveProfile(userId) {
+    try {
+      setSavingProfileId(userId);
+      setErrorMessage("");
+      setSuccessMessage("");
+
+      const draft = profileDrafts[userId];
+
+      const response = await fetch(buildApiUrl(`/admin/users/${userId}`), {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(draft),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.message || "Gagal memperbarui user");
+      }
+
+      setSuccessMessage("Data user berhasil diperbarui.");
+      await fetchUsers(false);
+    } catch (error) {
+      setErrorMessage(error.message || "Gagal memperbarui user");
+    } finally {
+      setSavingProfileId("");
+    }
+  }
+
+  async function handleSaveStatus(userId) {
+    try {
+      setSavingStatusId(userId);
+      setErrorMessage("");
+      setSuccessMessage("");
+
+      const draft = statusDrafts[userId];
+
+      const response = await fetch(buildApiUrl(`/admin/users/${userId}/status`), {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(draft),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.message || "Gagal memperbarui status user");
+      }
+
+      setSuccessMessage("Status user berhasil diperbarui.");
+      await fetchUsers(false);
+    } catch (error) {
+      setErrorMessage(error.message || "Gagal memperbarui status user");
+    } finally {
+      setSavingStatusId("");
+    }
+  }
+
   return (
     <section style={{ display: "grid", gap: "20px" }}>
       <div
@@ -143,10 +263,11 @@ export default function AdminUsers() {
       >
         <div>
           <h2 style={{ margin: "0 0 8px", fontSize: "30px" }}>
-            Data User Terdaftar
+            Kelola User
           </h2>
           <p style={{ margin: 0, color: "#bdbdbd", lineHeight: 1.7 }}>
-            Daftar seluruh user yang telah register di website PLAT EA.
+            Admin dapat mengedit user, menonaktifkan user, dan memblokir login
+            user.
           </p>
         </div>
 
@@ -181,13 +302,6 @@ export default function AdminUsers() {
         </div>
 
         <div className="card-dark" style={{ padding: "20px" }}>
-          <div style={{ fontSize: "13px", color: "#9f9f9f" }}>User Biasa</div>
-          <div style={{ marginTop: "10px", fontSize: "30px", fontWeight: 900 }}>
-            {summary.normalUsers}
-          </div>
-        </div>
-
-        <div className="card-dark" style={{ padding: "20px" }}>
           <div style={{ fontSize: "13px", color: "#9f9f9f" }}>Admin</div>
           <div style={{ marginTop: "10px", fontSize: "30px", fontWeight: 900 }}>
             {summary.adminUsers}
@@ -195,23 +309,21 @@ export default function AdminUsers() {
         </div>
 
         <div className="card-dark" style={{ padding: "20px" }}>
-          <div style={{ fontSize: "13px", color: "#9f9f9f" }}>
-            Total Booking dari User
-          </div>
+          <div style={{ fontSize: "13px", color: "#9f9f9f" }}>Nonaktif</div>
           <div style={{ marginTop: "10px", fontSize: "30px", fontWeight: 900 }}>
-            {summary.totalBookings}
+            {summary.inactiveUsers}
+          </div>
+        </div>
+
+        <div className="card-dark" style={{ padding: "20px" }}>
+          <div style={{ fontSize: "13px", color: "#9f9f9f" }}>Diblokir</div>
+          <div style={{ marginTop: "10px", fontSize: "30px", fontWeight: 900 }}>
+            {summary.blockedUsers}
           </div>
         </div>
       </div>
 
-      <div
-        className="card-dark"
-        style={{
-          padding: "18px",
-          display: "grid",
-          gap: "14px",
-        }}
-      >
+      <div className="card-dark" style={{ padding: "18px", display: "grid", gap: "14px" }}>
         <div style={{ fontWeight: 800, fontSize: "15px" }}>Filter Data User</div>
 
         <div
@@ -250,40 +362,7 @@ export default function AdminUsers() {
             <option value="MOST_BOOKINGS">Urutkan: Booking Terbanyak</option>
           </select>
         </div>
-
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            gap: "12px",
-            flexWrap: "wrap",
-            color: "#9f9f9f",
-            fontSize: "13px",
-          }}
-        >
-          <div>
-            Menampilkan <strong>{filteredUsers.length}</strong> user
-          </div>
-
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={() => {
-              setSearchTerm("");
-              setRoleFilter("ALL");
-              setSortBy("NEWEST");
-            }}
-          >
-            Reset Filter
-          </button>
-        </div>
       </div>
-
-      {loading && (
-        <div className="card-dark" style={{ padding: "20px" }}>
-          Memuat data user...
-        </div>
-      )}
 
       {errorMessage && (
         <div
@@ -301,200 +380,294 @@ export default function AdminUsers() {
         </div>
       )}
 
-      {!loading && !errorMessage && filteredUsers.length === 0 && (
-        <div className="card-dark" style={{ padding: "20px" }}>
-          Tidak ada data user yang cocok dengan filter.
+      {successMessage && (
+        <div
+          style={{
+            padding: "14px",
+            borderRadius: "14px",
+            backgroundColor: "rgba(80, 200, 120, 0.12)",
+            border: "1px solid rgba(80, 200, 120, 0.35)",
+            color: "#bff0ce",
+            fontSize: "14px",
+            lineHeight: 1.6,
+          }}
+        >
+          {successMessage}
         </div>
       )}
 
-      {!loading && filteredUsers.length > 0 && (
+      {loading ? (
+        <div className="card-dark" style={{ padding: "20px" }}>
+          Memuat data user...
+        </div>
+      ) : filteredUsers.length === 0 ? (
+        <div className="card-dark" style={{ padding: "20px" }}>
+          Tidak ada data user.
+        </div>
+      ) : (
         <div style={{ display: "grid", gap: "16px" }}>
-          {filteredUsers.map((user) => (
-            <div
-              key={user.id}
-              className="card-dark"
-              style={{
-                padding: "20px",
-                display: "grid",
-                gap: "14px",
-              }}
-            >
+          {filteredUsers.map((user) => {
+            const profileDraft = profileDrafts[user.id] || {
+              name: "",
+              email: "",
+              phone: "",
+              role: "USER",
+            };
+
+            const statusDraft = statusDrafts[user.id] || {
+              isActive: true,
+              isBlocked: false,
+              blockedReason: "",
+            };
+
+            const isSavingProfile = savingProfileId === user.id;
+            const isSavingStatus = savingStatusId === user.id;
+
+            return (
               <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  gap: "16px",
-                  flexWrap: "wrap",
-                  alignItems: "center",
-                }}
+                key={user.id}
+                className="card-dark"
+                style={{ padding: "20px", display: "grid", gap: "16px" }}
               >
-                <div>
-                  <div style={{ fontSize: "22px", fontWeight: 800 }}>
-                    {user.name || "-"}
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    gap: "16px",
+                    flexWrap: "wrap",
+                    alignItems: "center",
+                  }}
+                >
+                  <div>
+                    <div style={{ fontSize: "22px", fontWeight: 800 }}>
+                      {user.name || "-"}
+                    </div>
+                    <div style={{ marginTop: "6px", color: "#9f9f9f", fontSize: "13px" }}>
+                      ID: {user.id}
+                    </div>
                   </div>
-                  <div
+
+                  <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                    <span
+                      style={{
+                        display: "inline-block",
+                        padding: "8px 12px",
+                        borderRadius: "999px",
+                        backgroundColor:
+                          user.role === "ADMIN"
+                            ? "rgba(59,130,246,0.16)"
+                            : "rgba(255,255,255,0.08)",
+                        color: user.role === "ADMIN" ? "#bfdbfe" : "#ffffff",
+                        fontSize: "12px",
+                        fontWeight: 700,
+                      }}
+                    >
+                      {user.role}
+                    </span>
+
+                    <span
+                      style={{
+                        display: "inline-block",
+                        padding: "8px 12px",
+                        borderRadius: "999px",
+                        backgroundColor: user.isActive
+                          ? "rgba(34,197,94,0.16)"
+                          : "rgba(239,68,68,0.16)",
+                        color: user.isActive ? "#bbf7d0" : "#fecaca",
+                        fontSize: "12px",
+                        fontWeight: 700,
+                      }}
+                    >
+                      {user.isActive ? "Aktif" : "Nonaktif"}
+                    </span>
+
+                    <span
+                      style={{
+                        display: "inline-block",
+                        padding: "8px 12px",
+                        borderRadius: "999px",
+                        backgroundColor: user.isBlocked
+                          ? "rgba(239,68,68,0.16)"
+                          : "rgba(255,255,255,0.08)",
+                        color: user.isBlocked ? "#fecaca" : "#ffffff",
+                        fontSize: "12px",
+                        fontWeight: 700,
+                      }}
+                    >
+                      {user.isBlocked ? "Diblokir" : "Tidak diblokir"}
+                    </span>
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+                    gap: "12px",
+                  }}
+                >
+                  <input
+                    className="input-dark"
+                    placeholder="Nama"
+                    value={profileDraft.name}
+                    onChange={(e) =>
+                      handleProfileDraftChange(user.id, "name", e.target.value)
+                    }
+                  />
+
+                  <input
+                    className="input-dark"
+                    placeholder="Email"
+                    value={profileDraft.email}
+                    onChange={(e) =>
+                      handleProfileDraftChange(user.id, "email", e.target.value)
+                    }
+                  />
+
+                  <input
+                    className="input-dark"
+                    placeholder="Nomor HP"
+                    value={profileDraft.phone}
+                    onChange={(e) =>
+                      handleProfileDraftChange(user.id, "phone", e.target.value)
+                    }
+                  />
+
+                  <select
+                    className="select-dark"
+                    value={profileDraft.role}
+                    onChange={(e) =>
+                      handleProfileDraftChange(user.id, "role", e.target.value)
+                    }
+                  >
+                    {roleOptions.map((role) => (
+                      <option key={role} value={role}>
+                        {role}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={() => handleSaveProfile(user.id)}
+                  disabled={isSavingProfile}
+                  style={{ width: "100%", opacity: isSavingProfile ? 0.7 : 1 }}
+                >
+                  {isSavingProfile ? "Menyimpan Profil..." : "Simpan Profil User"}
+                </button>
+
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+                    gap: "12px",
+                  }}
+                >
+                  <label
                     style={{
-                      marginTop: "6px",
-                      color: "#9f9f9f",
-                      fontSize: "13px",
-                      wordBreak: "break-word",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "10px",
+                      padding: "14px",
+                      borderRadius: "14px",
+                      backgroundColor: "rgba(255,255,255,0.04)",
                     }}
                   >
-                    ID: {user.id}
-                  </div>
-                </div>
+                    <input
+                      type="checkbox"
+                      checked={statusDraft.isActive}
+                      onChange={(e) =>
+                        handleStatusDraftChange(user.id, "isActive", e.target.checked)
+                      }
+                    />
+                    Akun Aktif
+                  </label>
 
-                <span
-                  style={{
-                    display: "inline-block",
-                    padding: "8px 12px",
-                    borderRadius: "999px",
-                    backgroundColor:
-                      user.role === "ADMIN"
-                        ? "rgba(59,130,246,0.16)"
-                        : "rgba(255,255,255,0.08)",
-                    color: user.role === "ADMIN" ? "#bfdbfe" : "#ffffff",
-                    fontSize: "12px",
-                    fontWeight: 700,
-                  }}
-                >
-                  {user.role}
-                </span>
-              </div>
-
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-                  gap: "12px",
-                }}
-              >
-                <div
-                  style={{
-                    padding: "16px",
-                    borderRadius: "16px",
-                    backgroundColor: "rgba(255,255,255,0.04)",
-                  }}
-                >
-                  <div style={{ fontSize: "12px", color: "#9f9f9f" }}>Email</div>
-                  <div
+                  <label
                     style={{
-                      marginTop: "6px",
-                      fontWeight: 700,
-                      wordBreak: "break-word",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "10px",
+                      padding: "14px",
+                      borderRadius: "14px",
+                      backgroundColor: "rgba(255,255,255,0.04)",
                     }}
                   >
-                    {user.email || "-"}
-                  </div>
+                    <input
+                      type="checkbox"
+                      checked={statusDraft.isBlocked}
+                      onChange={(e) =>
+                        handleStatusDraftChange(user.id, "isBlocked", e.target.checked)
+                      }
+                    />
+                    Blokir Login
+                  </label>
                 </div>
+
+                <textarea
+                  className="input-dark"
+                  placeholder="Alasan blokir"
+                  rows={3}
+                  value={statusDraft.blockedReason}
+                  onChange={(e) =>
+                    handleStatusDraftChange(user.id, "blockedReason", e.target.value)
+                  }
+                  style={{ resize: "vertical" }}
+                />
+
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => handleSaveStatus(user.id)}
+                  disabled={isSavingStatus}
+                  style={{ width: "100%", opacity: isSavingStatus ? 0.7 : 1 }}
+                >
+                  {isSavingStatus ? "Menyimpan Status..." : "Simpan Status User"}
+                </button>
 
                 <div
                   style={{
-                    padding: "16px",
-                    borderRadius: "16px",
-                    backgroundColor: "rgba(255,255,255,0.04)",
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+                    gap: "12px",
                   }}
                 >
-                  <div style={{ fontSize: "12px", color: "#9f9f9f" }}>No. HP</div>
-                  <div style={{ marginTop: "6px", fontWeight: 700 }}>
-                    {user.phone || "-"}
+                  <div className="card-soft" style={{ padding: "16px" }}>
+                    <div style={{ fontSize: "12px", color: "#9f9f9f" }}>Register</div>
+                    <div style={{ marginTop: "6px", fontWeight: 700 }}>
+                      {formatDateTime(user.createdAt)}
+                    </div>
                   </div>
-                </div>
 
-                <div
-                  style={{
-                    padding: "16px",
-                    borderRadius: "16px",
-                    backgroundColor: "rgba(255,255,255,0.04)",
-                  }}
-                >
-                  <div style={{ fontSize: "12px", color: "#9f9f9f" }}>
-                    Tanggal Register
+                  <div className="card-soft" style={{ padding: "16px" }}>
+                    <div style={{ fontSize: "12px", color: "#9f9f9f" }}>Blocked At</div>
+                    <div style={{ marginTop: "6px", fontWeight: 700 }}>
+                      {formatDateTime(user.blockedAt)}
+                    </div>
                   </div>
-                  <div style={{ marginTop: "6px", fontWeight: 700 }}>
-                    {formatDateTime(user.createdAt)}
+
+                  <div className="card-soft" style={{ padding: "16px" }}>
+                    <div style={{ fontSize: "12px", color: "#9f9f9f" }}>Total Booking</div>
+                    <div style={{ marginTop: "6px", fontSize: "24px", fontWeight: 900 }}>
+                      {user.stats?.totalBookings || 0}
+                    </div>
+                  </div>
+
+                  <div
+                    className="card-soft"
+                    style={{ padding: "16px", backgroundColor: "#ffffff", color: "#000000" }}
+                  >
+                    <div style={{ fontSize: "12px", opacity: 0.7 }}>Total Pengeluaran</div>
+                    <div style={{ marginTop: "6px", fontSize: "24px", fontWeight: 900 }}>
+                      {formatRupiah(user.stats?.totalSpent || 0)}
+                    </div>
                   </div>
                 </div>
               </div>
-
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-                  gap: "12px",
-                }}
-              >
-                <div
-                  style={{
-                    padding: "16px",
-                    borderRadius: "16px",
-                    backgroundColor: "rgba(255,255,255,0.04)",
-                  }}
-                >
-                  <div style={{ fontSize: "12px", color: "#9f9f9f" }}>
-                    Total Booking
-                  </div>
-                  <div
-                    style={{ marginTop: "6px", fontSize: "24px", fontWeight: 900 }}
-                  >
-                    {user.stats?.totalBookings || 0}
-                  </div>
-                </div>
-
-                <div
-                  style={{
-                    padding: "16px",
-                    borderRadius: "16px",
-                    backgroundColor: "rgba(255,255,255,0.04)",
-                  }}
-                >
-                  <div style={{ fontSize: "12px", color: "#9f9f9f" }}>
-                    Booking Selesai
-                  </div>
-                  <div
-                    style={{ marginTop: "6px", fontSize: "24px", fontWeight: 900 }}
-                  >
-                    {user.stats?.completedBookings || 0}
-                  </div>
-                </div>
-
-                <div
-                  style={{
-                    padding: "16px",
-                    borderRadius: "16px",
-                    backgroundColor: "rgba(255,255,255,0.04)",
-                  }}
-                >
-                  <div style={{ fontSize: "12px", color: "#9f9f9f" }}>
-                    Booking Dibatalkan
-                  </div>
-                  <div
-                    style={{ marginTop: "6px", fontSize: "24px", fontWeight: 900 }}
-                  >
-                    {user.stats?.cancelledBookings || 0}
-                  </div>
-                </div>
-
-                <div
-                  style={{
-                    padding: "16px",
-                    borderRadius: "16px",
-                    backgroundColor: "#ffffff",
-                    color: "#000000",
-                  }}
-                >
-                  <div style={{ fontSize: "12px", opacity: 0.7 }}>
-                    Total Pengeluaran
-                  </div>
-                  <div
-                    style={{ marginTop: "6px", fontSize: "24px", fontWeight: 900 }}
-                  >
-                    {formatRupiah(user.stats?.totalSpent || 0)}
-                  </div>
-                </div>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </section>

@@ -6,11 +6,34 @@ const { requireAuth } = require("../middlewares/auth");
 
 const router = express.Router();
 
+function formatUser(user) {
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    phone: user.phone,
+    role: user.role,
+    isActive: user.isActive,
+    isBlocked: user.isBlocked,
+    blockedReason: user.blockedReason,
+    blockedAt: user.blockedAt,
+    createdAt: user.createdAt,
+    updatedAt: user.updatedAt,
+  };
+}
+
 router.post("/register", async (req, res) => {
   try {
-    const { name, email, password, phone } = req.body;
+    const { name, email, password, phone } = req.body || {};
 
-    if (!name || !email || !password) {
+    const safeName = typeof name === "string" ? name.trim() : "";
+    const normalizedEmail =
+      typeof email === "string" ? email.trim().toLowerCase() : "";
+    const safePassword = typeof password === "string" ? password : "";
+    const safePhone =
+      typeof phone === "string" && phone.trim() ? phone.trim() : null;
+
+    if (!safeName || !normalizedEmail || !safePassword) {
       return res.status(400).json({
         success: false,
         message: "Nama, email, dan password wajib diisi",
@@ -18,7 +41,7 @@ router.post("/register", async (req, res) => {
     }
 
     const existingUser = await prisma.user.findUnique({
-      where: { email },
+      where: { email: normalizedEmail },
     });
 
     if (existingUser) {
@@ -28,30 +51,24 @@ router.post("/register", async (req, res) => {
       });
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const hashedPassword = await bcrypt.hash(safePassword, 10);
 
     const user = await prisma.user.create({
       data: {
-        name: name.trim(),
-        email: email.trim().toLowerCase(),
-        phone: phone?.trim() || null,
+        name: safeName,
+        email: normalizedEmail,
+        phone: safePhone,
         password: hashedPassword,
         role: "USER",
         isActive: true,
+        isBlocked: false,
       },
     });
 
     res.status(201).json({
       success: true,
       message: "Registrasi berhasil",
-      data: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        phone: user.phone,
-        role: user.role,
-        isActive: user.isActive,
-      },
+      data: formatUser(user),
     });
   } catch (error) {
     console.error("REGISTER ERROR:", error);
@@ -65,9 +82,13 @@ router.post("/register", async (req, res) => {
 
 router.post("/login", async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password } = req.body || {};
 
-    if (!email || !password) {
+    const normalizedEmail =
+      typeof email === "string" ? email.trim().toLowerCase() : "";
+    const safePassword = typeof password === "string" ? password : "";
+
+    if (!normalizedEmail || !safePassword) {
       return res.status(400).json({
         success: false,
         message: "Email dan password wajib diisi",
@@ -75,7 +96,7 @@ router.post("/login", async (req, res) => {
     }
 
     const user = await prisma.user.findUnique({
-      where: { email: email.trim().toLowerCase() },
+      where: { email: normalizedEmail },
     });
 
     if (!user) {
@@ -92,7 +113,14 @@ router.post("/login", async (req, res) => {
       });
     }
 
-    const isMatch = await bcrypt.compare(password, user.password);
+    if (user.isBlocked) {
+      return res.status(403).json({
+        success: false,
+        message: user.blockedReason || "Akun ini diblokir oleh admin PLAT EA.",
+      });
+    }
+
+    const isMatch = await bcrypt.compare(safePassword, user.password);
 
     if (!isMatch) {
       return res.status(401).json({
@@ -117,14 +145,7 @@ router.post("/login", async (req, res) => {
       message: "Login berhasil",
       data: {
         token,
-        user: {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          phone: user.phone,
-          role: user.role,
-          isActive: user.isActive,
-        },
+        user: formatUser(user),
       },
     });
   } catch (error) {
@@ -141,15 +162,6 @@ router.get("/me", requireAuth, async (req, res) => {
   try {
     const user = await prisma.user.findUnique({
       where: { id: req.user.sub },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        phone: true,
-        role: true,
-        isActive: true,
-        createdAt: true,
-      },
     });
 
     if (!user) {
@@ -161,7 +173,7 @@ router.get("/me", requireAuth, async (req, res) => {
 
     res.json({
       success: true,
-      data: user,
+      data: formatUser(user),
     });
   } catch (error) {
     console.error("ME ERROR:", error);

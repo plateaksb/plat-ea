@@ -57,6 +57,8 @@ const allowedCancelReasons = [
   "Alasan lainnya",
 ];
 
+const allowedRoles = ["USER", "ADMIN"];
+
 function assertNonEmptyString(value, fieldName) {
   if (typeof value !== "string" || !value.trim()) {
     throw new Error(`${fieldName} wajib diisi`);
@@ -70,6 +72,26 @@ function toPositiveNumber(value, fieldName) {
     throw new Error(`${fieldName} harus lebih dari 0`);
   }
   return num;
+}
+
+function normalizeOptionalString(value) {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed || null;
+}
+
+function normalizeRequiredString(value, fieldName) {
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error(`${fieldName} wajib diisi`);
+  }
+  return value.trim();
+}
+
+function normalizeEmail(value) {
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error("Email wajib diisi");
+  }
+  return value.trim().toLowerCase();
 }
 
 function mapServiceType(service) {
@@ -105,7 +127,6 @@ function buildScheduledBooking(scheduleDate, scheduleTime) {
 
   const safeDate = String(scheduleDate).trim();
   const safeTime = String(scheduleTime).trim();
-
   const scheduledAt = new Date(`${safeDate}T${safeTime}:00+08:00`);
 
   if (Number.isNaN(scheduledAt.getTime())) {
@@ -226,6 +247,10 @@ function formatBookingList(bookings) {
           email: booking.user.email,
           phone: booking.user.phone,
           role: booking.user.role,
+          isActive: booking.user.isActive,
+          isBlocked: booking.user.isBlocked,
+          blockedReason: booking.user.blockedReason,
+          blockedAt: booking.user.blockedAt,
         }
       : null,
   }));
@@ -419,6 +444,10 @@ app.post("/api/bookings", requireAuth, async (req, res) => {
             email: booking.user.email,
             phone: booking.user.phone,
             role: booking.user.role,
+            isActive: booking.user.isActive,
+            isBlocked: booking.user.isBlocked,
+            blockedReason: booking.user.blockedReason,
+            blockedAt: booking.user.blockedAt,
           }
         : null,
     },
@@ -540,82 +569,92 @@ app.put("/api/my-bookings/:id/cancel", requireAuth, async (req, res) => {
   });
 });
 
-app.put("/api/bookings/:id/driver", requireAuth, requireAdmin, async (req, res) => {
-  const { id } = req.params;
-  const { driverName, driverPhone, vehicleName, plateNumber } = req.body || {};
+app.put(
+  "/api/bookings/:id/driver",
+  requireAuth,
+  requireAdmin,
+  async (req, res) => {
+    const { id } = req.params;
+    const { driverName, driverPhone, vehicleName, plateNumber } = req.body || {};
 
-  const existing = await prisma.booking.findUnique({
-    where: { id },
-  });
+    const existing = await prisma.booking.findUnique({
+      where: { id },
+    });
 
-  if (!existing) {
-    return res.status(404).json({
-      success: false,
-      message: "Booking tidak ditemukan",
+    if (!existing) {
+      return res.status(404).json({
+        success: false,
+        message: "Booking tidak ditemukan",
+      });
+    }
+
+    const updatedBooking = await prisma.booking.update({
+      where: { id },
+      data: {
+        driverName:
+          typeof driverName === "string" ? driverName.trim() || null : null,
+        driverPhone:
+          typeof driverPhone === "string" ? driverPhone.trim() || null : null,
+        vehicleName:
+          typeof vehicleName === "string" ? vehicleName.trim() || null : null,
+        plateNumber:
+          typeof plateNumber === "string" ? plateNumber.trim() || null : null,
+      },
+      include: {
+        user: true,
+      },
+    });
+
+    res.json({
+      success: true,
+      message: "Data driver berhasil diperbarui",
+      data: formatBookingList([updatedBooking])[0],
     });
   }
+);
 
-  const updatedBooking = await prisma.booking.update({
-    where: { id },
-    data: {
-      driverName:
-        typeof driverName === "string" ? driverName.trim() || null : null,
-      driverPhone:
-        typeof driverPhone === "string" ? driverPhone.trim() || null : null,
-      vehicleName:
-        typeof vehicleName === "string" ? vehicleName.trim() || null : null,
-      plateNumber:
-        typeof plateNumber === "string" ? plateNumber.trim() || null : null,
-    },
-    include: {
-      user: true,
-    },
-  });
+app.put(
+  "/api/bookings/:id/status",
+  requireAuth,
+  requireAdmin,
+  async (req, res) => {
+    const { id } = req.params;
+    const { status } = req.body || {};
 
-  res.json({
-    success: true,
-    message: "Data driver berhasil diperbarui",
-    data: formatBookingList([updatedBooking])[0],
-  });
-});
+    if (!status || !allowedStatuses.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: "Status booking tidak valid",
+      });
+    }
 
-app.put("/api/bookings/:id/status", requireAuth, requireAdmin, async (req, res) => {
-  const { id } = req.params;
-  const { status } = req.body || {};
+    const existing = await prisma.booking.findUnique({
+      where: { id },
+    });
 
-  if (!status || !allowedStatuses.includes(status)) {
-    return res.status(400).json({
-      success: false,
-      message: "Status booking tidak valid",
+    if (!existing) {
+      return res.status(404).json({
+        success: false,
+        message: "Booking tidak ditemukan",
+      });
+    }
+
+    const updatedBooking = await prisma.booking.update({
+      where: { id },
+      data: { status },
+    });
+
+    res.json({
+      success: true,
+      message: "Status booking berhasil diperbarui",
+      data: {
+        id: updatedBooking.id,
+        status: updatedBooking.status,
+        updatedAt: updatedBooking.updatedAt,
+      },
     });
   }
-
-  const existing = await prisma.booking.findUnique({
-    where: { id },
-  });
-
-  if (!existing) {
-    return res.status(404).json({
-      success: false,
-      message: "Booking tidak ditemukan",
-    });
-  }
-
-  const updatedBooking = await prisma.booking.update({
-    where: { id },
-    data: { status },
-  });
-
-  res.json({
-    success: true,
-    message: "Status booking berhasil diperbarui",
-    data: {
-      id: updatedBooking.id,
-      status: updatedBooking.status,
-      updatedAt: updatedBooking.updatedAt,
-    },
-  });
-});
+);
 
 app.get("/api/admin/users", requireAuth, requireAdmin, async (req, res) => {
   const users = await prisma.user.findMany({
@@ -650,6 +689,10 @@ app.get("/api/admin/users", requireAuth, requireAdmin, async (req, res) => {
       email: user.email,
       phone: user.phone,
       role: user.role,
+      isActive: user.isActive,
+      isBlocked: user.isBlocked,
+      blockedReason: user.blockedReason,
+      blockedAt: user.blockedAt,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
       stats: {
@@ -666,6 +709,145 @@ app.get("/api/admin/users", requireAuth, requireAdmin, async (req, res) => {
     data: formattedUsers,
   });
 });
+
+app.put("/api/admin/users/:id", requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, email, phone, role } = req.body || {};
+
+    const existingUser = await prisma.user.findUnique({
+      where: { id },
+    });
+
+    if (!existingUser) {
+      return res.status(404).json({
+        success: false,
+        message: "User tidak ditemukan",
+      });
+    }
+
+    const safeName = normalizeRequiredString(name, "Nama");
+    const normalizedEmail = normalizeEmail(email);
+    const safePhone = normalizeOptionalString(phone);
+
+    if (!role || !allowedRoles.includes(role)) {
+      return res.status(400).json({
+        success: false,
+        message: "Role user tidak valid",
+      });
+    }
+
+    if (req.user.sub === id && role !== "ADMIN") {
+      return res.status(400).json({
+        success: false,
+        message: "Admin tidak boleh menurunkan role dirinya sendiri",
+      });
+    }
+
+    const duplicatedEmail = await prisma.user.findFirst({
+      where: {
+        email: normalizedEmail,
+        NOT: { id },
+      },
+    });
+
+    if (duplicatedEmail) {
+      return res.status(409).json({
+        success: false,
+        message: "Email sudah digunakan user lain",
+      });
+    }
+
+    const updatedUser = await prisma.user.update({
+      where: { id },
+      data: {
+        name: safeName,
+        email: normalizedEmail,
+        phone: safePhone,
+        role,
+      },
+    });
+
+    return res.json({
+      success: true,
+      message: "Data user berhasil diperbarui",
+      data: updatedUser,
+    });
+  } catch (error) {
+    return res.status(400).json({
+      success: false,
+      message: error.message || "Gagal memperbarui user",
+    });
+  }
+});
+
+app.put(
+  "/api/admin/users/:id/status",
+  requireAuth,
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { isActive, isBlocked, blockedReason } = req.body || {};
+
+      const existingUser = await prisma.user.findUnique({
+        where: { id },
+      });
+
+      if (!existingUser) {
+        return res.status(404).json({
+          success: false,
+          message: "User tidak ditemukan",
+        });
+      }
+
+      if (req.user.sub === id && (isActive === false || isBlocked === true)) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Admin tidak boleh menonaktifkan atau memblokir dirinya sendiri",
+        });
+      }
+
+      const nextIsActive =
+        typeof isActive === "boolean" ? isActive : existingUser.isActive;
+
+      const nextIsBlocked =
+        typeof isBlocked === "boolean" ? isBlocked : existingUser.isBlocked;
+
+      const nextBlockedReason = nextIsBlocked
+        ? normalizeOptionalString(blockedReason) || "Diblokir oleh admin"
+        : null;
+
+      const nextBlockedAt = nextIsBlocked
+        ? existingUser.isBlocked && existingUser.blockedAt
+          ? existingUser.blockedAt
+          : new Date()
+        : null;
+
+      const updatedUser = await prisma.user.update({
+        where: { id },
+        data: {
+          isActive: nextIsActive,
+          isBlocked: nextIsBlocked,
+          blockedReason: nextBlockedReason,
+          blockedAt: nextBlockedAt,
+        },
+      });
+
+      return res.json({
+        success: true,
+        message: "Status user berhasil diperbarui",
+        data: updatedUser,
+      });
+    } catch (error) {
+      return res.status(400).json({
+        success: false,
+        message: error.message || "Gagal memperbarui status user",
+      });
+    }
+  }
+);
 
 app.use((req, res) => {
   res.status(404).json({
