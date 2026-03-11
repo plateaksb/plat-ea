@@ -1,57 +1,46 @@
 import { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
+import { Link } from "react-router-dom";
 import { buildApiUrl } from "../lib/api";
 
-export default function Login() {
-  const navigate = useNavigate();
-  const { login } = useAuth();
-
+export default function ForgotPassword() {
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
 
-  async function handleSubmit(e) {
-    e.preventDefault();
+  async function handleSubmit(event) {
+    event.preventDefault();
 
     try {
       setLoading(true);
       setErrorMessage("");
+      setSuccessMessage("");
 
-      const response = await fetch(buildApiUrl("/auth/login"), {
+      const response = await fetch(buildApiUrl("/auth/forgot-password"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
           email,
-          password,
         }),
       });
 
       const result = await response.json();
 
-      if (!response.ok || !result.success) {
-        throw new Error(result.message || "Login gagal");
+      if (!response.ok) {
+        throw new Error(result.message || "Gagal memproses lupa password");
       }
 
-      const token = result.data?.token || result.token || "";
-      const loggedInUser = result.data?.user || result.user || null;
-
-      if (!token || !loggedInUser) {
-        throw new Error("Response login tidak lengkap");
-      }
-
-      login(token, loggedInUser);
-
-      if (loggedInUser.role === "ADMIN") {
-        navigate("/admin");
-      } else {
-        navigate("/");
-      }
+      setSuccessMessage(
+        result.message ||
+          "Jika email terdaftar, link reset password akan diproses."
+      );
+      setEmail("");
     } catch (error) {
-      setErrorMessage(error.message || "Login gagal");
+      setErrorMessage(
+        error.message || "Terjadi kesalahan saat memproses lupa password"
+      );
     } finally {
       setLoading(false);
     }
@@ -73,16 +62,16 @@ export default function Login() {
       <div
         style={{
           width: "100%",
-          maxWidth: "420px",
+          maxWidth: "460px",
           backgroundColor: "#151515",
           border: "1px solid rgba(255,255,255,0.08)",
           borderRadius: "24px",
           padding: "32px",
         }}
       >
-        <h1 style={{ marginTop: 0 }}>Masuk ke PLAT EA</h1>
-        <p style={{ color: "#b8b8b8", lineHeight: 1.7 }}>
-          Login untuk memesan layanan atau mengakses dashboard admin.
+        <h1 style={{ marginTop: 0, marginBottom: "10px" }}>Lupa Password</h1>
+        <p style={{ color: "#b8b8b8", lineHeight: 1.7, marginTop: 0 }}>
+          Masukkan email akunmu. Sistem akan memproses link reset password.
         </p>
 
         <form
@@ -98,35 +87,9 @@ export default function Login() {
               className="input-dark"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="Masukkan email"
+              placeholder="Masukkan email akun"
               required
             />
-          </div>
-
-          <div>
-            <label style={{ display: "block", marginBottom: 8, fontSize: 14 }}>
-              Password
-            </label>
-            <input
-              type="password"
-              className="input-dark"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Masukkan password"
-              required
-            />
-          </div>
-
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "flex-end",
-              marginTop: "-4px",
-            }}
-          >
-            <Link to="/forgot-password" style={{ color: "#ffffff", fontSize: 14 }}>
-              Lupa Password?
-            </Link>
           </div>
 
           {errorMessage && (
@@ -142,6 +105,22 @@ export default function Login() {
               }}
             >
               {errorMessage}
+            </div>
+          )}
+
+          {successMessage && (
+            <div
+              style={{
+                padding: "14px",
+                borderRadius: "14px",
+                backgroundColor: "rgba(80, 200, 120, 0.12)",
+                border: "1px solid rgba(80, 200, 120, 0.35)",
+                color: "#bff0ce",
+                fontSize: "14px",
+                lineHeight: 1.6,
+              }}
+            >
+              {successMessage}
             </div>
           )}
 
@@ -161,16 +140,28 @@ export default function Login() {
             }}
             disabled={loading}
           >
-            {loading ? "Sedang login..." : "Masuk"}
+            {loading ? "Memproses..." : "Kirim Permintaan Reset"}
           </button>
         </form>
 
-        <p style={{ marginTop: 18, color: "#b8b8b8", fontSize: 14 }}>
-          Belum punya akun?{" "}
-          <Link to="/register" style={{ color: "#fff" }}>
-            Daftar di sini
+        <div
+          style={{
+            marginTop: "18px",
+            display: "flex",
+            justifyContent: "space-between",
+            gap: "12px",
+            flexWrap: "wrap",
+            color: "#b8b8b8",
+            fontSize: 14,
+          }}
+        >
+          <Link to="/login" style={{ color: "#fff" }}>
+            Kembali ke Login
           </Link>
-        </p>
+          <Link to="/register" style={{ color: "#fff" }}>
+            Belum punya akun?
+          </Link>
+        </div>
       </div>
     </div>
   );

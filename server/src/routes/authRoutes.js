@@ -1,10 +1,13 @@
 const express = require("express");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const crypto = require("crypto");
 const prisma = require("../lib/prisma");
 const { requireAuth } = require("../middlewares/auth");
 
 const router = express.Router();
+
+const RESET_PASSWORD_EXPIRES_MINUTES = 30;
 
 function formatUser(user) {
   return {
@@ -20,6 +23,20 @@ function formatUser(user) {
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
   };
+}
+
+function hashResetToken(token) {
+  return crypto.createHash("sha256").update(token).digest("hex");
+}
+
+function buildResetPasswordLink(token) {
+  const baseUrl =
+    process.env.FRONTEND_URL ||
+    process.env.CLIENT_URL ||
+    "http://localhost:5173";
+
+  const normalizedBaseUrl = baseUrl.replace(/\/+$/, "");
+  return `${normalizedBaseUrl}/reset-password?token=${encodeURIComponent(token)}`;
 }
 
 router.post("/register", async (req, res) => {
@@ -154,6 +171,142 @@ router.post("/login", async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Terjadi kesalahan saat login",
+    });
+  }
+});
+
+router.post("/forgot-password", async (req, res) => {
+  try {
+    const { email } = req.body || {};
+    const normalizedEmail =
+      typeof email === "string" ? email.trim().toLowerCase() : "";
+
+    if (!normalizedEmail) {
+      return res.status(400).json({
+        success: false,
+        message: "Email wajib diisi",
+      });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { email: normalizedEmail },
+    });
+
+    const genericResponse = {
+      success: true,
+      message:
+        "Jika email terdaftar, link reset password akan diproses.",
+    };
+
+    if (!user) {
+      return res.json(genericResponse);
+    }
+
+    const rawToken = crypto.randomBytes(32).toString("hex");
+    const hashedToken = hashResetToken(rawToken);
+    const expiresAt = new Date(
+      Date.now() + RESET_PASSWORD_EXPIRES_MINUTES * 60 * 1000
+    );
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        resetPasswordToken: hashedToken,
+        resetPasswordExpiresAt: expiresAt,
+      },
+    });
+
+    const resetLink = buildResetPasswordLink(rawToken);
+
+    console.log("RESET PASSWORD LINK:", {
+      email: user.email,
+      resetLink,
+      expiresAt,
+    });
+
+    return res.json({
+      ...genericResponse,
+      ...(process.env.NODE_ENV !== "production" ? { resetLink } : {}),
+    });
+  } catch (error) {
+    console.error("FORGOT PASSWORD ERROR:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Terjadi kesalahan saat memproses lupa password",
+    });
+  }
+});
+
+router.post("/reset-password", async (req, res) => {
+  try {
+    const { token, password, confirmPassword } = req.body || {};
+
+    const safeToken = typeof token === "string" ? token.trim() : "";
+    const safePassword = typeof password === "string" ? password : "";
+    const safeConfirmPassword =
+      typeof confirmPassword === "string" ? confirmPassword : "";
+
+    if (!safeToken || !safePassword || !safeConfirmPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "Token, password baru, dan konfirmasi password wajib diisi",
+      });
+    }
+
+    if (safePassword.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: "Password baru minimal 6 karakter",
+      });
+    }
+
+    if (safePassword !== safeConfirmPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "Konfirmasi password tidak sama",
+      });
+    }
+
+    const hashedToken = hashResetToken(safeToken);
+
+    const user = await prisma.user.findFirst({
+      where: {
+        resetPasswordToken: hashedToken,
+        resetPasswordExpiresAt: {
+          gt: new Date(),
+        },
+      },
+    });
+
+    if (!user) {
+      return res.status(400).json({
+        success: false,
+        message: "Token reset password tidak valid atau sudah kedaluwarsa",
+      });
+    }
+
+    const hashedPassword = await bcrypt.hash(safePassword, 10);
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        password: hashedPassword,
+        resetPasswordToken: null,
+        resetPasswordExpiresAt: null,
+      },
+    });
+
+    return res.json({
+      success: true,
+      message: "Password berhasil direset. Silakan login dengan password baru.",
+    });
+  } catch (error) {
+    console.error("RESET PASSWORD ERROR:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Terjadi kesalahan saat reset password",
     });
   }
 });

@@ -1,9 +1,18 @@
-import { BrowserRouter, Navigate, Route, Routes, Link, useLocation } from "react-router-dom";
+import {
+  BrowserRouter,
+  Navigate,
+  Route,
+  Routes,
+  Link,
+  useLocation,
+} from "react-router-dom";
 import { useAuth } from "./context/AuthContext";
 
 import Home from "./pages/Home";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
 import Booking from "./pages/Booking";
 import History from "./pages/History";
 import OrderDetail from "./pages/OrderDetail";
@@ -65,7 +74,6 @@ function AdminLayout({ title, description, children }) {
         color: "#ffffff",
         fontFamily: "Inter, Arial, sans-serif",
         overflowX: "hidden",
-
       }}
     >
       <header
@@ -93,7 +101,8 @@ function AdminLayout({ title, description, children }) {
           <div>
             <div style={{ fontSize: "22px", fontWeight: 900 }}>PLAT EA Admin</div>
             <div style={{ marginTop: "4px", fontSize: "13px", color: "#9f9f9f" }}>
-              Login sebagai: <strong style={{ color: "#ffffff" }}>{user?.name || "Admin"}</strong>
+              Login sebagai:{" "}
+              <strong style={{ color: "#ffffff" }}>{user?.name || "Admin"}</strong>
             </div>
           </div>
 
@@ -117,7 +126,7 @@ function AdminLayout({ title, description, children }) {
         </div>
       </header>
 
-      <main style={{ maxWidth: "100%", margin: "0 auto", padding: "24px 20px 60px" }}>
+      <main style={{ width: "100%", margin: "0 auto", padding: "24px 20px 60px" }}>
         <div
           style={{
             display: "grid",
@@ -177,9 +186,7 @@ function AdminLayout({ title, description, children }) {
               }}
             >
               <div style={{ fontSize: "30px", fontWeight: 900 }}>{title}</div>
-              <div style={{ color: "#bdbdbd", lineHeight: 1.7 }}>
-                {description}
-              </div>
+              <div style={{ color: "#bdbdbd", lineHeight: 1.7 }}>{description}</div>
             </div>
 
             {children}
@@ -303,6 +310,8 @@ export default function App() {
         <Route path="/" element={<Home />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
 
         <Route
           path="/booking"
