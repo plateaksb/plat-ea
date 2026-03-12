@@ -4,6 +4,7 @@ const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
 const prisma = require("../lib/prisma");
 const { requireAuth } = require("../middlewares/auth");
+const { isMailerConfigured, sendEmail } = require("../lib/mailer");
 
 const router = express.Router();
 
@@ -37,6 +38,58 @@ function buildResetPasswordLink(token) {
 
   const normalizedBaseUrl = baseUrl.replace(/\/+$/, "");
   return `${normalizedBaseUrl}/reset-password?token=${encodeURIComponent(token)}`;
+}
+
+function buildResetPasswordEmail({ userName, resetLink }) {
+  const appName = process.env.APP_NAME || "PLAT EA";
+
+  return {
+    subject: `${appName} - Reset Password`,
+    text: [
+      `Halo ${userName || "Pengguna"},`,
+      "",
+      `Kami menerima permintaan reset password untuk akun ${appName}.`,
+      `Klik link berikut untuk membuat password baru:`,
+      resetLink,
+      "",
+      `Link ini berlaku selama ${RESET_PASSWORD_EXPIRES_MINUTES} menit.`,
+      `Jika kamu tidak meminta reset password, abaikan email ini.`,
+      "",
+      `Terima kasih,`,
+      appName,
+    ].join("\n"),
+    html: `
+      <div style="font-family: Arial, sans-serif; line-height: 1.7; color: #111111;">
+        <h2 style="margin-bottom: 12px;">Reset Password ${appName}</h2>
+        <p>Halo ${userName || "Pengguna"},</p>
+        <p>Kami menerima permintaan reset password untuk akunmu.</p>
+        <p>
+          Klik tombol di bawah ini untuk membuat password baru:
+        </p>
+        <p style="margin: 24px 0;">
+          <a
+            href="${resetLink}"
+            style="
+              display: inline-block;
+              padding: 12px 18px;
+              background: #111111;
+              color: #ffffff;
+              text-decoration: none;
+              border-radius: 10px;
+              font-weight: bold;
+            "
+          >
+            Reset Password
+          </a>
+        </p>
+        <p>Atau buka link berikut secara manual:</p>
+        <p style="word-break: break-word;">${resetLink}</p>
+        <p>Link ini berlaku selama ${RESET_PASSWORD_EXPIRES_MINUTES} menit.</p>
+        <p>Jika kamu tidak meminta reset password, abaikan email ini.</p>
+        <p>Terima kasih,<br />${appName}</p>
+      </div>
+    `,
+  };
 }
 
 router.post("/register", async (req, res) => {
@@ -194,8 +247,7 @@ router.post("/forgot-password", async (req, res) => {
 
     const genericResponse = {
       success: true,
-      message:
-        "Jika email terdaftar, link reset password akan diproses.",
+      message: "Jika email terdaftar, link reset password akan dikirim.",
     };
 
     if (!user) {
@@ -218,11 +270,44 @@ router.post("/forgot-password", async (req, res) => {
 
     const resetLink = buildResetPasswordLink(rawToken);
 
-    console.log("RESET PASSWORD LINK:", {
-      email: user.email,
-      resetLink,
-      expiresAt,
-    });
+    try {
+      if (isMailerConfigured()) {
+        const emailPayload = buildResetPasswordEmail({
+          userName: user.name,
+          resetLink,
+        });
+
+        await sendEmail({
+          to: user.email,
+          subject: emailPayload.subject,
+          text: emailPayload.text,
+          html: emailPayload.html,
+        });
+      } else if (process.env.NODE_ENV !== "production") {
+        console.log("RESET PASSWORD LINK:", {
+          email: user.email,
+          resetLink,
+          expiresAt,
+        });
+      } else {
+        throw new Error("Layanan email belum dikonfigurasi");
+      }
+    } catch (mailError) {
+      console.error("SEND RESET EMAIL ERROR:", mailError);
+
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          resetPasswordToken: null,
+          resetPasswordExpiresAt: null,
+        },
+      });
+
+      return res.status(500).json({
+        success: false,
+        message: "Gagal mengirim email reset password",
+      });
+    }
 
     return res.json({
       ...genericResponse,
