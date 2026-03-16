@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { importLibrary, setOptions } from "@googlemaps/js-api-loader";
 
 setOptions({
@@ -21,7 +21,6 @@ function createMarkerIcon(color) {
 export default function LiveMapPicker({
   pickup,
   destination,
-  activePoint = "pickup",
   routePolyline,
   onPickupSelect,
   onDestinationSelect,
@@ -29,20 +28,16 @@ export default function LiveMapPicker({
   const mapRef = useRef(null);
   const pickupInputRef = useRef(null);
   const destinationInputRef = useRef(null);
-
   const mapInstanceRef = useRef(null);
   const geocoderRef = useRef(null);
   const pickupMarkerRef = useRef(null);
   const destinationMarkerRef = useRef(null);
   const routeLineRef = useRef(null);
 
-  const pickupAutocompleteRef = useRef(null);
-  const destinationAutocompleteRef = useRef(null);
-  const mapClickListenerRef = useRef(null);
-
   const onPickupSelectRef = useRef(onPickupSelect);
   const onDestinationSelectRef = useRef(onDestinationSelect);
-  const activePointRef = useRef(activePoint);
+
+  const [activePoint, setActivePoint] = useState("pickup");
 
   useEffect(() => {
     onPickupSelectRef.current = onPickupSelect;
@@ -53,11 +48,8 @@ export default function LiveMapPicker({
   }, [onDestinationSelect]);
 
   useEffect(() => {
-    activePointRef.current = activePoint;
-  }, [activePoint]);
-
-  useEffect(() => {
     let isMounted = true;
+    let mapClickListener = null;
 
     async function initMap() {
       const { Map } = await importLibrary("maps");
@@ -77,7 +69,7 @@ export default function LiveMapPicker({
       mapInstanceRef.current = map;
       geocoderRef.current = new google.maps.Geocoder();
 
-      pickupAutocompleteRef.current = new google.maps.places.Autocomplete(
+      const pickupAutocomplete = new google.maps.places.Autocomplete(
         pickupInputRef.current,
         {
           componentRestrictions: { country: "id" },
@@ -85,7 +77,7 @@ export default function LiveMapPicker({
         }
       );
 
-      destinationAutocompleteRef.current = new google.maps.places.Autocomplete(
+      const destinationAutocomplete = new google.maps.places.Autocomplete(
         destinationInputRef.current,
         {
           componentRestrictions: { country: "id" },
@@ -93,8 +85,8 @@ export default function LiveMapPicker({
         }
       );
 
-      pickupAutocompleteRef.current.addListener("place_changed", () => {
-        const place = pickupAutocompleteRef.current.getPlace();
+      pickupAutocomplete.addListener("place_changed", () => {
+        const place = pickupAutocomplete.getPlace();
         if (!place.geometry?.location) return;
 
         const payload = {
@@ -126,8 +118,8 @@ export default function LiveMapPicker({
         );
       });
 
-      destinationAutocompleteRef.current.addListener("place_changed", () => {
-        const place = destinationAutocompleteRef.current.getPlace();
+      destinationAutocomplete.addListener("place_changed", () => {
+        const place = destinationAutocomplete.getPlace();
         if (!place.geometry?.location) return;
 
         const payload = {
@@ -159,71 +151,88 @@ export default function LiveMapPicker({
         );
       });
 
-      mapClickListenerRef.current = map.addListener("click", async (event) => {
+      mapClickListener = map.addListener("click", async (event) => {
         const lat = event.latLng.lat();
         const lng = event.latLng.lng();
 
+        let payload = {
+          placeId: "",
+          name: "Lokasi dipilih dari peta",
+          address: `${lat}, ${lng}`,
+          lat,
+          lng,
+        };
+
         try {
           const geocoder = geocoderRef.current;
-          const response = await geocoder.geocode({
-            location: { lat, lng },
-          });
 
-          const result = response.results?.[0];
-
-          const payload = {
-            placeId: result?.place_id || "",
-            name: result?.formatted_address || "Lokasi dipilih dari peta",
-            address: result?.formatted_address || `${lat}, ${lng}`,
-            lat,
-            lng,
-          };
-
-          if (activePointRef.current === "pickup") {
-            onPickupSelectRef.current(payload);
-
-            if (pickupInputRef.current) {
-              pickupInputRef.current.value = payload.address;
-            }
-
-            if (pickupMarkerRef.current) {
-              pickupMarkerRef.current.setMap(null);
-            }
-
-            pickupMarkerRef.current = new google.maps.Marker({
-              map,
-              position: { lat, lng },
-              title: "Pickup",
-              icon: createMarkerIcon("#16a34a"),
+          if (geocoder) {
+            const response = await geocoder.geocode({
+              location: { lat, lng },
             });
-          } else {
-            onDestinationSelectRef.current(payload);
 
-            if (destinationInputRef.current) {
-              destinationInputRef.current.value = payload.address;
+            const result = response.results?.[0];
+
+            if (result) {
+              payload = {
+                placeId: result.place_id || "",
+                name: result.formatted_address || "Lokasi dipilih dari peta",
+                address: result.formatted_address || `${lat}, ${lng}`,
+                lat,
+                lng,
+              };
             }
-
-            if (destinationMarkerRef.current) {
-              destinationMarkerRef.current.setMap(null);
-            }
-
-            destinationMarkerRef.current = new google.maps.Marker({
-              map,
-              position: { lat, lng },
-              title: "Destination",
-              icon: createMarkerIcon("#dc2626"),
-            });
           }
-
-          fitMap(
-            map,
-            pickupMarkerRef.current,
-            destinationMarkerRef.current,
-            routeLineRef.current
-          );
         } catch (error) {
           console.error("Geocoder error:", error);
         }
+
+        if (activePoint === "pickup") {
+          onPickupSelectRef.current(payload);
+
+          if (pickupInputRef.current) {
+            pickupInputRef.current.value = payload.address;
+          }
+
+          if (pickupMarkerRef.current) {
+            pickupMarkerRef.current.setMap(null);
+          }
+
+          pickupMarkerRef.current = new google.maps.Marker({
+            map,
+            position: { lat, lng },
+            title: "Pickup",
+            icon: createMarkerIcon("#16a34a"),
+          });
+
+          setActivePoint("destination");
+        } else {
+          onDestinationSelectRef.current(payload);
+
+          if (destinationInputRef.current) {
+            destinationInputRef.current.value = payload.address;
+          }
+
+          if (destinationMarkerRef.current) {
+            destinationMarkerRef.current.setMap(null);
+          }
+
+          destinationMarkerRef.current = new google.maps.Marker({
+            map,
+            position: { lat, lng },
+            title: "Destination",
+            icon: createMarkerIcon("#dc2626"),
+          });
+
+          setActivePoint("pickup");
+        }
+
+        fitMap(
+          map,
+          pickupMarkerRef.current,
+          destinationMarkerRef.current,
+          routeLineRef.current
+        );
       });
     }
 
@@ -234,12 +243,11 @@ export default function LiveMapPicker({
     return () => {
       isMounted = false;
 
-      if (mapClickListenerRef.current) {
-        google.maps.event.removeListener(mapClickListenerRef.current);
-        mapClickListenerRef.current = null;
+      if (mapClickListener && window.google?.maps?.event) {
+        google.maps.event.removeListener(mapClickListener);
       }
     };
-  }, []);
+  }, [activePoint]);
 
   useEffect(() => {
     const map = mapInstanceRef.current;
@@ -254,13 +262,6 @@ export default function LiveMapPicker({
         pickupMarkerRef.current.setMap(null);
         pickupMarkerRef.current = null;
       }
-
-      fitMap(
-        map,
-        pickupMarkerRef.current,
-        destinationMarkerRef.current,
-        routeLineRef.current
-      );
       return;
     }
 
@@ -296,13 +297,6 @@ export default function LiveMapPicker({
         destinationMarkerRef.current.setMap(null);
         destinationMarkerRef.current = null;
       }
-
-      fitMap(
-        map,
-        pickupMarkerRef.current,
-        destinationMarkerRef.current,
-        routeLineRef.current
-      );
       return;
     }
 
@@ -327,7 +321,7 @@ export default function LiveMapPicker({
 
   useEffect(() => {
     const map = mapInstanceRef.current;
-    if (!map) return;
+    if (!map || !window.google?.maps?.geometry?.encoding) return;
 
     if (routeLineRef.current) {
       routeLineRef.current.setMap(null);
@@ -460,10 +454,7 @@ export default function LiveMapPicker({
 function fitMap(map, pickupMarker, destinationMarker, routeLine) {
   const bounds = new google.maps.LatLngBounds();
 
-  if (pickupMarker?.getPosition()) {
-    bounds.extend(pickupMarker.getPosition());
-  }
-
+  if (pickupMarker?.getPosition()) bounds.extend(pickupMarker.getPosition());
   if (destinationMarker?.getPosition()) {
     bounds.extend(destinationMarker.getPosition());
   }

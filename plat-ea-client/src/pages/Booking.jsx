@@ -16,7 +16,6 @@ export default function Booking() {
   const [taxiType, setTaxiType] = useState("car4");
   const [pickup, setPickup] = useState(null);
   const [destination, setDestination] = useState(null);
-  const [activePoint, setActivePoint] = useState("pickup");
 
   const [distance, setDistance] = useState(0);
   const [routeInfo, setRouteInfo] = useState(null);
@@ -62,22 +61,6 @@ export default function Booking() {
     });
   }
 
-  function handlePickupSelect(payload) {
-    setPickup(payload);
-    setErrorMessage("");
-    setSuccessMessage("Titik jemput berhasil dipilih dari peta.");
-
-    if (!destination) {
-      setActivePoint("destination");
-    }
-  }
-
-  function handleDestinationSelect(payload) {
-    setDestination(payload);
-    setErrorMessage("");
-    setSuccessMessage("Titik tujuan berhasil dipilih dari peta.");
-  }
-
   function handleSwapLocations() {
     setErrorMessage("");
     setSuccessMessage("");
@@ -98,7 +81,6 @@ export default function Booking() {
     setRouteInfo(null);
     setRoutePolyline("");
     setEstimate(null);
-    setActivePoint("pickup");
   }
 
   async function reverseGeocode(lat, lng) {
@@ -144,7 +126,6 @@ export default function Booking() {
 
       const payload = await reverseGeocode(lat, lng);
       setPickup(payload);
-      setActivePoint("destination");
       setSuccessMessage("Lokasi saat ini berhasil dipakai sebagai titik jemput.");
     } catch (error) {
       setErrorMessage(
@@ -275,9 +256,7 @@ export default function Booking() {
       destination?.lng == null ||
       distance <= 0
     ) {
-      setErrorMessage(
-        "Silakan pilih titik jemput dan tujuan langsung dari peta."
-      );
+      setErrorMessage("Silakan pilih titik jemput dan tujuan dari peta.");
       return;
     }
 
@@ -446,26 +425,6 @@ export default function Booking() {
                 >
                   <button
                     type="button"
-                    className={activePoint === "pickup" ? "btn-primary" : "btn-secondary"}
-                    onClick={() => setActivePoint("pickup")}
-                  >
-                    Mode Jemput
-                  </button>
-
-                  <button
-                    type="button"
-                    className={
-                      activePoint === "destination"
-                        ? "btn-primary"
-                        : "btn-secondary"
-                    }
-                    onClick={() => setActivePoint("destination")}
-                  >
-                    Mode Tujuan
-                  </button>
-
-                  <button
-                    type="button"
                     className="btn-secondary"
                     onClick={handleUseMyLocation}
                     disabled={locatingPickup}
@@ -502,36 +461,12 @@ export default function Booking() {
                 </div>
               </div>
 
-              <div
-                style={{
-                  padding: "14px",
-                  borderRadius: "14px",
-                  backgroundColor:
-                    activePoint === "pickup"
-                      ? "rgba(59, 130, 246, 0.12)"
-                      : "rgba(168, 85, 247, 0.12)",
-                  border:
-                    activePoint === "pickup"
-                      ? "1px solid rgba(59, 130, 246, 0.35)"
-                      : "1px solid rgba(168, 85, 247, 0.35)",
-                  color:
-                    activePoint === "pickup" ? "#bfdbfe" : "#e9d5ff",
-                  fontSize: "14px",
-                  lineHeight: 1.7,
-                }}
-              >
-                {activePoint === "pickup"
-                  ? "Mode aktif: Titik Jemput. Klik peta untuk menentukan lokasi jemput."
-                  : "Mode aktif: Titik Tujuan. Klik peta untuk menentukan lokasi tujuan."}
-              </div>
-
               <LiveMapPicker
                 pickup={pickup}
                 destination={destination}
-                activePoint={activePoint}
                 routePolyline={routePolyline}
-                onPickupSelect={handlePickupSelect}
-                onDestinationSelect={handleDestinationSelect}
+                onPickupSelect={setPickup}
+                onDestinationSelect={setDestination}
               />
 
               <div className="duo-grid">
