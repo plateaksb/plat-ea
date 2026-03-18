@@ -41,7 +41,7 @@ app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 
 const allowedStatuses = [
   "PENDING",
-  "ACCEPTED",
+  "ASSIGNED",
   "ONGOING",
   "COMPLETED",
   "CANCELLED",
@@ -58,7 +58,7 @@ const allowedCancelReasons = [
   "Alasan lainnya",
 ];
 
-const allowedRoles = ["USER", "ADMIN"];
+const allowedRoles = ["USER", "ADMIN", "DRIVER"];
 
 function assertNonEmptyString(value, fieldName) {
   if (typeof value !== "string" || !value.trim()) {
@@ -240,6 +240,9 @@ function formatBookingList(bookings) {
     driverPhone: booking.driverPhone,
     vehicleName: booking.vehicleName,
     plateNumber: booking.plateNumber,
+    assignedAt: booking.assignedAt,
+    startedAt: booking.startedAt,
+    completedAt: booking.completedAt,
     createdAt: booking.createdAt,
     updatedAt: booking.updatedAt,
     user: booking.user
@@ -546,7 +549,7 @@ app.put("/api/my-bookings/:id/cancel", requireAuth, async (req, res) => {
     });
   }
 
-  if (!["PENDING", "ACCEPTED"].includes(booking.status)) {
+  if (!["PENDING", "ASSIGNED"].includes(booking.status)) {
     return res.status(400).json({
       success: false,
       message: "Booking ini tidak bisa dibatalkan lagi",
@@ -643,9 +646,23 @@ app.put(
       });
     }
 
+    const updateData = { status };
+
+    if (status === "ASSIGNED" && !existing.assignedAt) {
+      updateData.assignedAt = new Date();
+    }
+
+    if (status === "ONGOING" && !existing.startedAt) {
+      updateData.startedAt = new Date();
+    }
+
+    if (status === "COMPLETED" && !existing.completedAt) {
+      updateData.completedAt = new Date();
+    }
+
     const updatedBooking = await prisma.booking.update({
       where: { id },
-      data: { status },
+      data: updateData,
     });
 
     res.json({
@@ -654,6 +671,9 @@ app.put(
       data: {
         id: updatedBooking.id,
         status: updatedBooking.status,
+        assignedAt: updatedBooking.assignedAt,
+        startedAt: updatedBooking.startedAt,
+        completedAt: updatedBooking.completedAt,
         updatedAt: updatedBooking.updatedAt,
       },
     });

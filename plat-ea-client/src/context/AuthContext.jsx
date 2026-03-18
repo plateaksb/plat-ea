@@ -136,6 +136,7 @@ export function AuthProvider({ children }) {
       loadingAuth: loading,
       isAuthenticated: Boolean(token && user),
       isAdmin: user?.role === "ADMIN",
+      isDriver: user?.role === "DRIVER",
       login,
       loginWithCredentials,
       register,

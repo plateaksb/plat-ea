@@ -47,6 +47,8 @@ export default function Login() {
 
       if (loggedInUser.role === "ADMIN") {
         navigate("/admin");
+      } else if (loggedInUser.role === "DRIVER") {
+        navigate("/driver");
       } else {
         navigate("/");
       }
@@ -82,7 +84,7 @@ export default function Login() {
       >
         <h1 style={{ marginTop: 0 }}>Masuk ke PLAT EA</h1>
         <p style={{ color: "#b8b8b8", lineHeight: 1.7 }}>
-          Login untuk memesan layanan atau mengakses dashboard admin.
+          Login untuk memesan layanan, mengakses dashboard admin, atau portal driver.
         </p>
 
         <form

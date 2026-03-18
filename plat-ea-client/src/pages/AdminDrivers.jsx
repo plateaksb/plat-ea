@@ -2,12 +2,71 @@ import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { buildApiUrl } from "../lib/api";
 
-const emptyNewDriver = {
+function Modal({ open, title, children, onClose }) {
+  if (!open) return null;
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed",
+        inset: 0,
+        backgroundColor: "rgba(0,0,0,0.65)",
+        display: "grid",
+        placeItems: "center",
+        padding: "24px",
+        zIndex: 999,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="card-dark"
+        style={{
+          width: "100%",
+          maxWidth: "640px",
+          padding: "22px",
+          borderRadius: "22px",
+          display: "grid",
+          gap: "16px",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            gap: "12px",
+            alignItems: "center",
+          }}
+        >
+          <div style={{ fontSize: "22px", fontWeight: 900 }}>{title}</div>
+          <button type="button" className="btn-secondary" onClick={onClose}>
+            Tutup
+          </button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+const initialCreateForm = {
+  name: "",
+  email: "",
+  password: "",
+  phone: "",
+  vehicleName: "",
+  plateNumber: "",
+  notes: "",
+};
+
+const initialEditForm = {
+  id: "",
   name: "",
   phone: "",
   vehicleName: "",
   plateNumber: "",
   notes: "",
+  userId: "",
 };
 
 export default function AdminDrivers() {
@@ -19,52 +78,45 @@ export default function AdminDrivers() {
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState("ALL");
-  const [drafts, setDrafts] = useState({});
-  const [creating, setCreating] = useState(false);
-  const [savingDriverId, setSavingDriverId] = useState("");
-  const [savingStatusId, setSavingStatusId] = useState("");
-  const [newDriver, setNewDriver] = useState(emptyNewDriver);
 
-  async function fetchDrivers(showMainLoader = false) {
+  const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+
+  const [createForm, setCreateForm] = useState(initialCreateForm);
+  const [editForm, setEditForm] = useState(initialEditForm);
+
+  const [creating, setCreating] = useState(false);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [statusLoadingId, setStatusLoadingId] = useState("");
+
+  async function fetchDrivers() {
+    const response = await fetch(buildApiUrl("/admin/drivers"), {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    const result = await response.json();
+
+    if (!response.ok || !result.success) {
+      throw new Error(result.message || "Gagal mengambil data driver");
+    }
+
+    setDrivers(result.data || []);
+  }
+
+  async function refreshData(showRefreshing = false) {
     try {
-      if (showMainLoader) {
-        setLoading(true);
-      } else {
+      if (showRefreshing) {
         setRefreshing(true);
+      } else {
+        setLoading(true);
       }
 
       setErrorMessage("");
-      setSuccessMessage("");
-
-      const response = await fetch(buildApiUrl("/admin/drivers"), {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.message || "Gagal mengambil daftar driver");
-      }
-
-      setDrivers(result.data);
-
-      const nextDrafts = {};
-      for (const driver of result.data) {
-        nextDrafts[driver.id] = {
-          name: driver.name || "",
-          phone: driver.phone || "",
-          vehicleName: driver.vehicleName || "",
-          plateNumber: driver.plateNumber || "",
-          notes: driver.notes || "",
-          isActive: Boolean(driver.isActive),
-        };
-      }
-      setDrafts(nextDrafts);
+      await fetchDrivers();
     } catch (error) {
-      setErrorMessage(error.message || "Terjadi kesalahan saat memuat driver");
+      setErrorMessage(error.message || "Gagal memuat data driver");
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -73,556 +125,629 @@ export default function AdminDrivers() {
 
   useEffect(() => {
     if (token) {
-      fetchDrivers(true);
+      refreshData();
     }
   }, [token]);
 
-  function handleDraftChange(driverId, field, value) {
-    setDrafts((prev) => ({
+  function openCreateModal() {
+    setCreateForm(initialCreateForm);
+    setCreateModalOpen(true);
+  }
+
+  function openEditModal(driver) {
+    setEditForm({
+      id: driver.id,
+      name: driver.name || "",
+      phone: driver.phone || "",
+      vehicleName: driver.vehicleName || "",
+      plateNumber: driver.plateNumber || "",
+      notes: driver.notes || "",
+      userId: driver.userId || "",
+    });
+    setEditModalOpen(true);
+  }
+
+  function handleCreateChange(field, value) {
+    setCreateForm((prev) => ({
       ...prev,
-      [driverId]: {
-        ...prev[driverId],
-        [field]: value,
-      },
+      [field]: value,
     }));
   }
 
-  async function handleCreateDriver() {
+  function handleEditChange(field, value) {
+    setEditForm((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
+  }
+
+  async function handleCreateDriverAccount(e) {
+    e.preventDefault();
+
     try {
       setCreating(true);
       setErrorMessage("");
       setSuccessMessage("");
 
-      const response = await fetch(buildApiUrl("/admin/drivers"), {
+      const response = await fetch(buildApiUrl("/admin/drivers/create-account"), {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
         },
-        body: JSON.stringify(newDriver),
+        body: JSON.stringify(createForm),
       });
 
       const result = await response.json();
 
-      if (!response.ok) {
-        throw new Error(result.message || "Gagal menambahkan driver");
+      if (!response.ok || !result.success) {
+        throw new Error(result.message || "Gagal membuat akun driver");
       }
 
-      setSuccessMessage("Driver berhasil ditambahkan.");
-      setNewDriver(emptyNewDriver);
-      await fetchDrivers(false);
+      setSuccessMessage("Akun driver berhasil dibuat.");
+      setCreateModalOpen(false);
+      setCreateForm(initialCreateForm);
+      await refreshData(true);
     } catch (error) {
-      setErrorMessage(error.message || "Gagal menambahkan driver");
+      setErrorMessage(error.message || "Gagal membuat akun driver");
     } finally {
       setCreating(false);
     }
   }
 
-  async function handleSaveDriver(driverId) {
+  async function handleSaveEdit(e) {
+    e.preventDefault();
+
     try {
-      setSavingDriverId(driverId);
+      setSavingEdit(true);
       setErrorMessage("");
       setSuccessMessage("");
 
-      const draft = drafts[driverId];
-
-      const response = await fetch(buildApiUrl(`/admin/drivers/${driverId}`), {
+      const response = await fetch(buildApiUrl(`/admin/drivers/${editForm.id}`), {
         method: "PUT",
         headers: {
-          "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          name: draft.name,
-          phone: draft.phone,
-          vehicleName: draft.vehicleName,
-          plateNumber: draft.plateNumber,
-          notes: draft.notes,
+          name: editForm.name,
+          phone: editForm.phone,
+          vehicleName: editForm.vehicleName,
+          plateNumber: editForm.plateNumber,
+          notes: editForm.notes,
+          userId: editForm.userId || null,
         }),
       });
 
       const result = await response.json();
 
-      if (!response.ok) {
+      if (!response.ok || !result.success) {
         throw new Error(result.message || "Gagal memperbarui driver");
       }
 
-      setSuccessMessage("Driver berhasil diperbarui.");
-      await fetchDrivers(false);
+      setSuccessMessage("Data driver berhasil diperbarui.");
+      setEditModalOpen(false);
+      await refreshData(true);
     } catch (error) {
       setErrorMessage(error.message || "Gagal memperbarui driver");
     } finally {
-      setSavingDriverId("");
+      setSavingEdit(false);
     }
   }
 
-  async function handleSaveStatus(driverId) {
+  async function handleToggleStatus(driver) {
     try {
-      setSavingStatusId(driverId);
+      setStatusLoadingId(driver.id);
       setErrorMessage("");
       setSuccessMessage("");
 
-      const draft = drafts[driverId];
-
-      const response = await fetch(
-        buildApiUrl(`/admin/drivers/${driverId}/status`),
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            isActive: Boolean(draft.isActive),
-          }),
-        }
-      );
+      const response = await fetch(buildApiUrl(`/admin/drivers/${driver.id}/status`), {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          isActive: !driver.isActive,
+        }),
+      });
 
       const result = await response.json();
 
-      if (!response.ok) {
-        throw new Error(result.message || "Gagal memperbarui status driver");
+      if (!response.ok || !result.success) {
+        throw new Error(result.message || "Gagal mengubah status driver");
       }
 
-      setSuccessMessage("Status driver berhasil diperbarui.");
-      await fetchDrivers(false);
+      setSuccessMessage(
+        !driver.isActive
+          ? "Driver berhasil diaktifkan."
+          : "Driver berhasil dinonaktifkan."
+      );
+      await refreshData(true);
     } catch (error) {
-      setErrorMessage(error.message || "Gagal memperbarui status driver");
+      setErrorMessage(error.message || "Gagal mengubah status driver");
     } finally {
-      setSavingStatusId("");
+      setStatusLoadingId("");
     }
   }
 
   const filteredDrivers = useMemo(() => {
-    let result = drivers;
+    const q = searchTerm.trim().toLowerCase();
 
-    if (statusFilter === "ACTIVE") {
-      result = result.filter((driver) => driver.isActive);
-    } else if (statusFilter === "INACTIVE") {
-      result = result.filter((driver) => !driver.isActive);
-    }
+    const list = [...drivers].filter((driver) => {
+      if (!q) return true;
 
-    const keyword = searchTerm.trim().toLowerCase();
+      return [
+        driver.name,
+        driver.phone,
+        driver.vehicleName,
+        driver.plateNumber,
+        driver.notes,
+        driver.user?.email,
+        driver.user?.name,
+      ]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(q));
+    });
 
-    if (keyword) {
-      result = result.filter((driver) => {
-        const haystack = [
-          driver.name,
-          driver.phone,
-          driver.vehicleName,
-          driver.plateNumber,
-          driver.notes,
-        ]
-          .filter(Boolean)
-          .join(" ")
-          .toLowerCase();
+    list.sort((a, b) => {
+      if (a.isActive !== b.isActive) return a.isActive ? -1 : 1;
+      return new Date(b.createdAt) - new Date(a.createdAt);
+    });
 
-        return haystack.includes(keyword);
-      });
-    }
+    return list;
+  }, [drivers, searchTerm]);
 
-    return result;
-  }, [drivers, statusFilter, searchTerm]);
-
-  const summary = useMemo(() => {
-    const totalDrivers = drivers.length;
-    const activeDrivers = drivers.filter((driver) => driver.isActive).length;
-    const inactiveDrivers = drivers.filter((driver) => !driver.isActive).length;
-
-    return {
-      totalDrivers,
-      activeDrivers,
-      inactiveDrivers,
-    };
-  }, [drivers]);
+  if (loading) {
+    return (
+      <div className="card-dark" style={{ padding: "20px" }}>
+        Memuat data driver...
+      </div>
+    );
+  }
 
   return (
-    <section style={{ display: "grid", gap: "20px" }}>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          gap: "16px",
-          flexWrap: "wrap",
-          alignItems: "center",
-        }}
-      >
-        <div>
-          <h2 style={{ margin: "0 0 8px", fontSize: "30px" }}>
-            Kelola Driver
-          </h2>
-          <p style={{ margin: 0, color: "#bdbdbd", lineHeight: 1.7 }}>
-            Data master driver terpisah agar admin tidak mengetik ulang driver
-            untuk setiap booking.
-          </p>
-        </div>
-
-        <button
-          type="button"
-          className="btn-secondary"
-          onClick={() => fetchDrivers(false)}
-          disabled={refreshing}
-        >
-          {refreshing ? "Memperbarui..." : "Refresh"}
-        </button>
-      </div>
-
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-          gap: "16px",
-        }}
-      >
-        <div className="card-dark" style={{ padding: "20px" }}>
-          <div style={{ fontSize: "13px", color: "#9f9f9f" }}>Total Driver</div>
-          <div style={{ marginTop: "10px", fontSize: "30px", fontWeight: 900 }}>
-            {summary.totalDrivers}
-          </div>
-        </div>
-
-        <div className="card-dark" style={{ padding: "20px" }}>
-          <div style={{ fontSize: "13px", color: "#9f9f9f" }}>Driver Aktif</div>
-          <div style={{ marginTop: "10px", fontSize: "30px", fontWeight: 900 }}>
-            {summary.activeDrivers}
-          </div>
-        </div>
-
-        <div className="card-dark" style={{ padding: "20px" }}>
-          <div style={{ fontSize: "13px", color: "#9f9f9f" }}>
-            Driver Nonaktif
-          </div>
-          <div style={{ marginTop: "10px", fontSize: "30px", fontWeight: 900 }}>
-            {summary.inactiveDrivers}
-          </div>
-        </div>
-      </div>
-
-      <div
-        className="card-dark"
-        style={{ padding: "20px", display: "grid", gap: "14px" }}
-      >
-        <div style={{ fontSize: "18px", fontWeight: 800 }}>
-          Tambah Driver Baru
-        </div>
-
+    <div style={{ display: "grid", gap: "18px" }}>
+      <div className="card-dark" style={{ padding: "18px", display: "grid", gap: "14px" }}>
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+            gridTemplateColumns: "minmax(0, 1fr) auto auto",
             gap: "12px",
+            alignItems: "end",
           }}
         >
-          <input
-            className="input-dark"
-            placeholder="Nama driver"
-            value={newDriver.name}
-            onChange={(e) =>
-              setNewDriver((prev) => ({ ...prev, name: e.target.value }))
-            }
-          />
-          <input
-            className="input-dark"
-            placeholder="No. HP"
-            value={newDriver.phone}
-            onChange={(e) =>
-              setNewDriver((prev) => ({ ...prev, phone: e.target.value }))
-            }
-          />
-          <input
-            className="input-dark"
-            placeholder="Nama kendaraan"
-            value={newDriver.vehicleName}
-            onChange={(e) =>
-              setNewDriver((prev) => ({ ...prev, vehicleName: e.target.value }))
-            }
-          />
-          <input
-            className="input-dark"
-            placeholder="Plat nomor"
-            value={newDriver.plateNumber}
-            onChange={(e) =>
-              setNewDriver((prev) => ({
-                ...prev,
-                plateNumber: e.target.value.toUpperCase(),
-              }))
-            }
-          />
+          <div>
+            <label
+              style={{
+                display: "block",
+                marginBottom: 8,
+                fontSize: 13,
+                color: "#bdbdbd",
+              }}
+            >
+              Cari Driver
+            </label>
+            <input
+              className="input-dark"
+              type="text"
+              placeholder="Cari nama, email, kendaraan, plat nomor..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+
+          <button type="button" className="btn-secondary" onClick={() => refreshData(true)}>
+            {refreshing ? "Menyegarkan..." : "Refresh"}
+          </button>
+
+          <button type="button" className="btn-primary" onClick={openCreateModal}>
+            Buat Akun Driver
+          </button>
         </div>
 
-        <textarea
-          className="input-dark"
-          rows={3}
-          placeholder="Catatan driver"
-          value={newDriver.notes}
-          onChange={(e) =>
-            setNewDriver((prev) => ({ ...prev, notes: e.target.value }))
-          }
-          style={{ resize: "vertical" }}
-        />
-
-        <button
-          type="button"
-          className="btn-primary"
-          onClick={handleCreateDriver}
-          disabled={creating}
-          style={{ width: "100%", opacity: creating ? 0.7 : 1 }}
-        >
-          {creating ? "Menyimpan..." : "Tambah Driver"}
-        </button>
-      </div>
-
-      <div
-        className="card-dark"
-        style={{ padding: "18px", display: "grid", gap: "14px" }}
-      >
-        <div style={{ fontWeight: 800, fontSize: "15px" }}>Filter Driver</div>
-
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-            gap: "12px",
-          }}
-        >
-          <input
-            type="text"
-            className="input-dark"
-            placeholder="Cari nama, no hp, kendaraan, plat..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-
-          <select
-            className="select-dark"
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
+        {errorMessage && (
+          <div
+            style={{
+              padding: "14px",
+              borderRadius: "14px",
+              backgroundColor: "rgba(255, 77, 77, 0.12)",
+              border: "1px solid rgba(255, 77, 77, 0.35)",
+              color: "#ffb3b3",
+            }}
           >
-            <option value="ALL">Semua Status</option>
-            <option value="ACTIVE">Aktif</option>
-            <option value="INACTIVE">Nonaktif</option>
-          </select>
-        </div>
+            {errorMessage}
+          </div>
+        )}
+
+        {successMessage && (
+          <div
+            style={{
+              padding: "14px",
+              borderRadius: "14px",
+              backgroundColor: "rgba(34, 197, 94, 0.12)",
+              border: "1px solid rgba(34, 197, 94, 0.35)",
+              color: "#bbf7d0",
+            }}
+          >
+            {successMessage}
+          </div>
+        )}
       </div>
 
-      {errorMessage && (
-        <div
-          style={{
-            padding: "14px",
-            borderRadius: "14px",
-            backgroundColor: "rgba(255, 77, 77, 0.12)",
-            border: "1px solid rgba(255, 77, 77, 0.35)",
-            color: "#ffb3b3",
-            fontSize: "14px",
-            lineHeight: 1.6,
-          }}
-        >
-          {errorMessage}
-        </div>
-      )}
-
-      {successMessage && (
-        <div
-          style={{
-            padding: "14px",
-            borderRadius: "14px",
-            backgroundColor: "rgba(80, 200, 120, 0.12)",
-            border: "1px solid rgba(80, 200, 120, 0.35)",
-            color: "#bff0ce",
-            fontSize: "14px",
-            lineHeight: 1.6,
-          }}
-        >
-          {successMessage}
-        </div>
-      )}
-
-      {loading ? (
+      {filteredDrivers.length === 0 ? (
         <div className="card-dark" style={{ padding: "20px" }}>
-          Memuat data driver...
-        </div>
-      ) : filteredDrivers.length === 0 ? (
-        <div className="card-dark" style={{ padding: "20px" }}>
-          Tidak ada data driver.
+          Belum ada data driver.
         </div>
       ) : (
-        <div style={{ display: "grid", gap: "16px" }}>
-          {filteredDrivers.map((driver) => {
-            const draft = drafts[driver.id] || {
-              name: "",
-              phone: "",
-              vehicleName: "",
-              plateNumber: "",
-              notes: "",
-              isActive: true,
-            };
-
-            const isSavingDriver = savingDriverId === driver.id;
-            const isSavingStatus = savingStatusId === driver.id;
-
-            return (
+        <div style={{ display: "grid", gap: "14px" }}>
+          {filteredDrivers.map((driver) => (
+            <div
+              key={driver.id}
+              className="card-dark"
+              style={{
+                padding: "20px",
+                display: "grid",
+                gap: "16px",
+                transition: "0.2s",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = "translateY(-2px)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = "translateY(0)";
+              }}
+            >
               <div
-                key={driver.id}
-                className="card-dark"
-                style={{ padding: "20px", display: "grid", gap: "16px" }}
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  gap: "16px",
+                  flexWrap: "wrap",
+                }}
               >
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    gap: "16px",
-                    flexWrap: "wrap",
-                    alignItems: "center",
-                  }}
-                >
+                <div style={{ display: "grid", gap: "8px" }}>
+                  <div style={{ fontSize: "20px", fontWeight: 900 }}>{driver.name}</div>
+
                   <div>
-                    <div style={{ fontSize: "22px", fontWeight: 800 }}>
-                      {driver.name}
-                    </div>
-                    <div
+                    <span
                       style={{
-                        marginTop: "6px",
-                        color: "#9f9f9f",
-                        fontSize: "13px",
+                        display: "inline-block",
+                        padding: "6px 10px",
+                        borderRadius: "999px",
+                        fontSize: "12px",
+                        fontWeight: 700,
+                        backgroundColor: driver.isActive
+                          ? "rgba(34,197,94,0.16)"
+                          : "rgba(239,68,68,0.16)",
+                        color: driver.isActive ? "#bbf7d0" : "#fecaca",
                       }}
                     >
-                      ID: {driver.id}
-                    </div>
+                      {driver.isActive ? "AKTIF" : "NONAKTIF"}
+                    </span>
                   </div>
 
-                  <span
-                    style={{
-                      display: "inline-block",
-                      padding: "8px 12px",
-                      borderRadius: "999px",
-                      backgroundColor: driver.isActive
-                        ? "rgba(34,197,94,0.16)"
-                        : "rgba(239,68,68,0.16)",
-                      color: driver.isActive ? "#bbf7d0" : "#fecaca",
-                      fontSize: "12px",
-                      fontWeight: 700,
-                    }}
-                  >
-                    {driver.isActive ? "Aktif" : "Nonaktif"}
-                  </span>
+                  <div style={{ color: "#bdbdbd" }}>
+                    Telepon: <strong style={{ color: "#fff" }}>{driver.phone || "-"}</strong>
+                  </div>
+                  <div style={{ color: "#bdbdbd" }}>
+                    Kendaraan:{" "}
+                    <strong style={{ color: "#fff" }}>{driver.vehicleName || "-"}</strong>
+                  </div>
+                  <div style={{ color: "#bdbdbd" }}>
+                    Plat Nomor:{" "}
+                    <strong style={{ color: "#fff" }}>{driver.plateNumber || "-"}</strong>
+                  </div>
                 </div>
 
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-                    gap: "12px",
-                  }}
-                >
-                  <input
-                    className="input-dark"
-                    placeholder="Nama driver"
-                    value={draft.name}
-                    onChange={(e) =>
-                      handleDraftChange(driver.id, "name", e.target.value)
-                    }
-                  />
-                  <input
-                    className="input-dark"
-                    placeholder="No. HP"
-                    value={draft.phone}
-                    onChange={(e) =>
-                      handleDraftChange(driver.id, "phone", e.target.value)
-                    }
-                  />
-                  <input
-                    className="input-dark"
-                    placeholder="Nama kendaraan"
-                    value={draft.vehicleName}
-                    onChange={(e) =>
-                      handleDraftChange(driver.id, "vehicleName", e.target.value)
-                    }
-                  />
-                  <input
-                    className="input-dark"
-                    placeholder="Plat nomor"
-                    value={draft.plateNumber}
-                    onChange={(e) =>
-                      handleDraftChange(
-                        driver.id,
-                        "plateNumber",
-                        e.target.value.toUpperCase()
-                      )
-                    }
-                  />
-                </div>
-
-                <textarea
-                  className="input-dark"
-                  rows={3}
-                  placeholder="Catatan"
-                  value={draft.notes}
-                  onChange={(e) =>
-                    handleDraftChange(driver.id, "notes", e.target.value)
-                  }
-                  style={{ resize: "vertical" }}
-                />
-
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-                    gap: "12px",
-                  }}
-                >
-                  <label
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "10px",
-                      padding: "14px",
-                      borderRadius: "14px",
-                      backgroundColor: "rgba(255,255,255,0.04)",
-                    }}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={Boolean(draft.isActive)}
-                      onChange={(e) =>
-                        handleDraftChange(driver.id, "isActive", e.target.checked)
-                      }
-                    />
-                    Driver Aktif
-                  </label>
-                </div>
-
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-                    gap: "12px",
-                  }}
-                >
-                  <button
-                    type="button"
-                    className="btn-primary"
-                    onClick={() => handleSaveDriver(driver.id)}
-                    disabled={isSavingDriver}
-                    style={{ width: "100%", opacity: isSavingDriver ? 0.7 : 1 }}
-                  >
-                    {isSavingDriver ? "Menyimpan..." : "Simpan Driver"}
-                  </button>
-
-                  <button
-                    type="button"
-                    className="btn-secondary"
-                    onClick={() => handleSaveStatus(driver.id)}
-                    disabled={isSavingStatus}
-                    style={{ width: "100%", opacity: isSavingStatus ? 0.7 : 1 }}
-                  >
-                    {isSavingStatus ? "Menyimpan..." : "Simpan Status"}
-                  </button>
+                <div style={{ textAlign: "right", display: "grid", gap: "8px" }}>
+                  <div style={{ color: "#9f9f9f", fontSize: "13px" }}>Akun Login</div>
+                  <div style={{ fontWeight: 800 }}>{driver.user?.email || "-"}</div>
+                  <div style={{ color: "#bdbdbd" }}>
+                    Role: <strong style={{ color: "#fff" }}>{driver.user?.role || "-"}</strong>
+                  </div>
                 </div>
               </div>
-            );
-          })}
+
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                  gap: "12px",
+                }}
+              >
+                <div
+                  className="card-dark"
+                  style={{
+                    padding: "14px",
+                    border: "1px solid rgba(255,255,255,0.08)",
+                  }}
+                >
+                  <div style={{ fontSize: "12px", color: "#9f9f9f", marginBottom: 8 }}>
+                    Informasi Driver
+                  </div>
+                  <div>ID Driver: {driver.id}</div>
+                  <div>User ID: {driver.userId || "-"}</div>
+                  <div>Catatan: {driver.notes || "-"}</div>
+                </div>
+
+                <div
+                  className="card-dark"
+                  style={{
+                    padding: "14px",
+                    border: "1px solid rgba(255,255,255,0.08)",
+                  }}
+                >
+                  <div style={{ fontSize: "12px", color: "#9f9f9f", marginBottom: 8 }}>
+                    Metadata
+                  </div>
+                  <div>
+                    Dibuat:{" "}
+                    {driver.createdAt
+                      ? new Date(driver.createdAt).toLocaleString("id-ID")
+                      : "-"}
+                  </div>
+                  <div>
+                    Diperbarui:{" "}
+                    {driver.updatedAt
+                      ? new Date(driver.updatedAt).toLocaleString("id-ID")
+                      : "-"}
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => openEditModal(driver)}
+                >
+                  Edit Driver
+                </button>
+
+                <button
+                  type="button"
+                  className={driver.isActive ? "btn-secondary" : "btn-primary"}
+                  disabled={statusLoadingId === driver.id}
+                  onClick={() => handleToggleStatus(driver)}
+                >
+                  {statusLoadingId === driver.id
+                    ? "Menyimpan..."
+                    : driver.isActive
+                    ? "Nonaktifkan"
+                    : "Aktifkan"}
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
       )}
-    </section>
+
+      <Modal
+        open={createModalOpen}
+        title="Buat Akun Driver"
+        onClose={() => setCreateModalOpen(false)}
+      >
+        <form onSubmit={handleCreateDriverAccount} style={{ display: "grid", gap: "14px" }}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+              gap: "12px",
+            }}
+          >
+            <div>
+              <label style={{ display: "block", marginBottom: 8, fontSize: 13, color: "#bdbdbd" }}>
+                Nama Driver
+              </label>
+              <input
+                className="input-dark"
+                value={createForm.name}
+                onChange={(e) => handleCreateChange("name", e.target.value)}
+                required
+              />
+            </div>
+
+            <div>
+              <label style={{ display: "block", marginBottom: 8, fontSize: 13, color: "#bdbdbd" }}>
+                No. HP
+              </label>
+              <input
+                className="input-dark"
+                value={createForm.phone}
+                onChange={(e) => handleCreateChange("phone", e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+              gap: "12px",
+            }}
+          >
+            <div>
+              <label style={{ display: "block", marginBottom: 8, fontSize: 13, color: "#bdbdbd" }}>
+                Email Login
+              </label>
+              <input
+                type="email"
+                className="input-dark"
+                value={createForm.email}
+                onChange={(e) => handleCreateChange("email", e.target.value)}
+                required
+              />
+            </div>
+
+            <div>
+              <label style={{ display: "block", marginBottom: 8, fontSize: 13, color: "#bdbdbd" }}>
+                Password
+              </label>
+              <input
+                type="password"
+                className="input-dark"
+                value={createForm.password}
+                onChange={(e) => handleCreateChange("password", e.target.value)}
+                required
+              />
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+              gap: "12px",
+            }}
+          >
+            <div>
+              <label style={{ display: "block", marginBottom: 8, fontSize: 13, color: "#bdbdbd" }}>
+                Nama Kendaraan
+              </label>
+              <input
+                className="input-dark"
+                value={createForm.vehicleName}
+                onChange={(e) => handleCreateChange("vehicleName", e.target.value)}
+                required
+              />
+            </div>
+
+            <div>
+              <label style={{ display: "block", marginBottom: 8, fontSize: 13, color: "#bdbdbd" }}>
+                Plat Nomor
+              </label>
+              <input
+                className="input-dark"
+                value={createForm.plateNumber}
+                onChange={(e) => handleCreateChange("plateNumber", e.target.value.toUpperCase())}
+                required
+              />
+            </div>
+          </div>
+
+          <div>
+            <label style={{ display: "block", marginBottom: 8, fontSize: 13, color: "#bdbdbd" }}>
+              Catatan
+            </label>
+            <textarea
+              className="input-dark"
+              rows={3}
+              value={createForm.notes}
+              onChange={(e) => handleCreateChange("notes", e.target.value)}
+            />
+          </div>
+
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", flexWrap: "wrap" }}>
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => setCreateModalOpen(false)}
+            >
+              Batal
+            </button>
+            <button type="submit" className="btn-primary" disabled={creating}>
+              {creating ? "Membuat akun..." : "Buat Akun Driver"}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal
+        open={editModalOpen}
+        title="Edit Driver"
+        onClose={() => setEditModalOpen(false)}
+      >
+        <form onSubmit={handleSaveEdit} style={{ display: "grid", gap: "14px" }}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+              gap: "12px",
+            }}
+          >
+            <div>
+              <label style={{ display: "block", marginBottom: 8, fontSize: 13, color: "#bdbdbd" }}>
+                Nama Driver
+              </label>
+              <input
+                className="input-dark"
+                value={editForm.name}
+                onChange={(e) => handleEditChange("name", e.target.value)}
+                required
+              />
+            </div>
+
+            <div>
+              <label style={{ display: "block", marginBottom: 8, fontSize: 13, color: "#bdbdbd" }}>
+                No. HP
+              </label>
+              <input
+                className="input-dark"
+                value={editForm.phone}
+                onChange={(e) => handleEditChange("phone", e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+              gap: "12px",
+            }}
+          >
+            <div>
+              <label style={{ display: "block", marginBottom: 8, fontSize: 13, color: "#bdbdbd" }}>
+                Nama Kendaraan
+              </label>
+              <input
+                className="input-dark"
+                value={editForm.vehicleName}
+                onChange={(e) => handleEditChange("vehicleName", e.target.value)}
+                required
+              />
+            </div>
+
+            <div>
+              <label style={{ display: "block", marginBottom: 8, fontSize: 13, color: "#bdbdbd" }}>
+                Plat Nomor
+              </label>
+              <input
+                className="input-dark"
+                value={editForm.plateNumber}
+                onChange={(e) => handleEditChange("plateNumber", e.target.value.toUpperCase())}
+                required
+              />
+            </div>
+          </div>
+
+          <div>
+            <label style={{ display: "block", marginBottom: 8, fontSize: 13, color: "#bdbdbd" }}>
+              Catatan
+            </label>
+            <textarea
+              className="input-dark"
+              rows={3}
+              value={editForm.notes}
+              onChange={(e) => handleEditChange("notes", e.target.value)}
+            />
+          </div>
+
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", flexWrap: "wrap" }}>
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => setEditModalOpen(false)}
+            >
+              Batal
+            </button>
+            <button type="submit" className="btn-primary" disabled={savingEdit}>
+              {savingEdit ? "Menyimpan..." : "Simpan Perubahan"}
+            </button>
+          </div>
+        </form>
+      </Modal>
+    </div>
   );
 }
