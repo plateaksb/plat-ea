@@ -88,6 +88,20 @@ function getStatusBadgeStyle(status) {
   }
 }
 
+function getScheduleBadgeStyle(isScheduled) {
+  return {
+    display: "inline-block",
+    padding: "6px 10px",
+    borderRadius: "999px",
+    fontSize: "12px",
+    fontWeight: 700,
+    backgroundColor: isScheduled
+      ? "rgba(249,115,22,0.16)"
+      : "rgba(255,255,255,0.08)",
+    color: isScheduled ? "#fdba74" : "#d4d4d4",
+  };
+}
+
 function Modal({ open, title, children, onClose }) {
   if (!open) return null;
 
@@ -419,6 +433,10 @@ export default function AdminBookings() {
       `Nama Pemesan: ${booking.user?.name || "-"}`,
       `No. HP Pemesan: ${booking.user?.phone || "-"}`,
       `Status: ${booking.status}`,
+      `Tipe Booking: ${booking.isScheduled ? "Terjadwal" : "Langsung"}`,
+      booking.isScheduled
+        ? `Jadwal Jemput: ${formatDateTime(booking.scheduledAt)}`
+        : `Waktu Order: ${formatDateTime(booking.createdAt)}`,
       `Pickup: ${booking.pickup || "-"}`,
       `Tujuan: ${booking.destination || "-"}`,
       `Driver: ${booking.driverName || "-"}`,
@@ -456,6 +474,9 @@ export default function AdminBookings() {
           booking.plateNumber,
           booking.serviceType,
           booking.status,
+          booking.isScheduled ? "terjadwal" : "langsung",
+          booking.scheduledAt,
+          booking.createdAt,
         ]
           .filter(Boolean)
           .some((value) => String(value).toLowerCase().includes(q))
@@ -603,23 +624,48 @@ export default function AdminBookings() {
                     <div style={{ fontSize: "18px", fontWeight: 900 }}>
                       {booking.serviceType} • {formatRupiah(booking.finalPrice)}
                     </div>
-                    <div>
-                      <span style={getStatusBadgeStyle(booking.status)}>{booking.status}</span>
+
+                    <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                      <span style={getStatusBadgeStyle(booking.status)}>
+                        {booking.status}
+                      </span>
+                      <span style={getScheduleBadgeStyle(booking.isScheduled)}>
+                        {booking.isScheduled ? "TERJADWAL" : "LANGSUNG"}
+                      </span>
                     </div>
+
                     <div style={{ color: "#bdbdbd" }}>
                       Pemesan:{" "}
                       <strong style={{ color: "#fff" }}>{booking.user?.name || "-"}</strong>
                     </div>
+
                     <div style={{ color: "#bdbdbd" }}>
                       Telepon:{" "}
                       <strong style={{ color: "#fff" }}>{booking.user?.phone || "-"}</strong>
                     </div>
+
                     <div style={{ color: "#bdbdbd" }}>
                       Dibuat:{" "}
                       <strong style={{ color: "#fff" }}>
                         {formatDateTime(booking.createdAt)}
                       </strong>
                     </div>
+
+                    <div style={{ color: "#bdbdbd" }}>
+                      Tipe Booking:{" "}
+                      <strong style={{ color: "#fff" }}>
+                        {booking.isScheduled ? "Terjadwal" : "Langsung"}
+                      </strong>
+                    </div>
+
+                    {booking.isScheduled && (
+                      <div style={{ color: "#bdbdbd" }}>
+                        Jadwal Jemput:{" "}
+                        <strong style={{ color: "#fff" }}>
+                          {formatDateTime(booking.scheduledAt)}
+                        </strong>
+                      </div>
+                    )}
                   </div>
 
                   <div style={{ textAlign: "right", display: "grid", gap: "8px" }}>
@@ -639,10 +685,12 @@ export default function AdminBookings() {
                     <div style={{ fontSize: "12px", color: "#9f9f9f" }}>Pickup</div>
                     <div>{booking.pickup}</div>
                   </div>
+
                   <div>
                     <div style={{ fontSize: "12px", color: "#9f9f9f" }}>Tujuan</div>
                     <div>{booking.destination}</div>
                   </div>
+
                   <div style={{ color: "#bdbdbd" }}>
                     Catatan: <strong style={{ color: "#fff" }}>{booking.note || "-"}</strong>
                   </div>
@@ -742,9 +790,24 @@ export default function AdminBookings() {
             <div style={{ color: "#bdbdbd", lineHeight: 1.7 }}>
               Booking: <strong style={{ color: "#fff" }}>{assignModalBooking.id}</strong>
               <br />
+              Tipe Booking:{" "}
+              <strong style={{ color: "#fff" }}>
+                {assignModalBooking.isScheduled ? "Terjadwal" : "Langsung"}
+              </strong>
+              <br />
+              {assignModalBooking.isScheduled && (
+                <>
+                  Jadwal Jemput:{" "}
+                  <strong style={{ color: "#fff" }}>
+                    {formatDateTime(assignModalBooking.scheduledAt)}
+                  </strong>
+                  <br />
+                </>
+              )}
               Pickup: <strong style={{ color: "#fff" }}>{assignModalBooking.pickup}</strong>
               <br />
-              Tujuan: <strong style={{ color: "#fff" }}>{assignModalBooking.destination}</strong>
+              Tujuan:{" "}
+              <strong style={{ color: "#fff" }}>{assignModalBooking.destination}</strong>
             </div>
 
             <div>
@@ -821,6 +884,20 @@ export default function AdminBookings() {
             <div style={{ color: "#bdbdbd", lineHeight: 1.7 }}>
               Booking: <strong style={{ color: "#fff" }}>{statusModalBooking.id}</strong>
               <br />
+              Tipe Booking:{" "}
+              <strong style={{ color: "#fff" }}>
+                {statusModalBooking.isScheduled ? "Terjadwal" : "Langsung"}
+              </strong>
+              <br />
+              {statusModalBooking.isScheduled && (
+                <>
+                  Jadwal Jemput:{" "}
+                  <strong style={{ color: "#fff" }}>
+                    {formatDateTime(statusModalBooking.scheduledAt)}
+                  </strong>
+                  <br />
+                </>
+              )}
               Status saat ini:{" "}
               <span style={getStatusBadgeStyle(statusModalBooking.status)}>
                 {statusModalBooking.status}
