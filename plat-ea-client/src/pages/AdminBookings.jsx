@@ -39,6 +39,32 @@ function normalizePhoneToWa(phone) {
   return cleaned;
 }
 
+function formatServiceLabel(serviceType) {
+  switch (serviceType) {
+    case "TAXI":
+      return "Taksi";
+    case "BIKE":
+      return "Ojek";
+    case "DELIVERY":
+      return "Delivery";
+    default:
+      return serviceType || "-";
+  }
+}
+
+function formatVehicleLabel(vehicleType) {
+  switch (vehicleType) {
+    case "CAR4":
+      return "Mobil 4 Penumpang";
+    case "CAR6":
+      return "Mobil 6 Penumpang";
+    case "PREMIUM":
+      return "Premium";
+    default:
+      return "-";
+  }
+}
+
 function getStatusBadgeStyle(status) {
   const base = {
     display: "inline-block",
@@ -433,6 +459,8 @@ export default function AdminBookings() {
       `Nama Pemesan: ${booking.user?.name || "-"}`,
       `No. HP Pemesan: ${booking.user?.phone || "-"}`,
       `Status: ${booking.status}`,
+      `Layanan: ${formatServiceLabel(booking.serviceType)}`,
+      `Jenis Kendaraan: ${formatVehicleLabel(booking.vehicleType)}`,
       `Tipe Booking: ${booking.isScheduled ? "Terjadwal" : "Langsung"}`,
       booking.isScheduled
         ? `Jadwal Jemput: ${formatDateTime(booking.scheduledAt)}`
@@ -441,7 +469,7 @@ export default function AdminBookings() {
       `Tujuan: ${booking.destination || "-"}`,
       `Driver: ${booking.driverName || "-"}`,
       `No. Driver: ${booking.driverPhone || "-"}`,
-      `Kendaraan: ${booking.vehicleName || "-"}`,
+      `Kendaraan Driver: ${booking.vehicleName || "-"}`,
       `Plat Nomor: ${booking.plateNumber || "-"}`,
       "",
       "Terima kasih telah menggunakan PLAT EA.",
@@ -473,6 +501,9 @@ export default function AdminBookings() {
           booking.driverName,
           booking.plateNumber,
           booking.serviceType,
+          booking.vehicleType,
+          formatServiceLabel(booking.serviceType),
+          formatVehicleLabel(booking.vehicleType),
           booking.status,
           booking.isScheduled ? "terjadwal" : "langsung",
           booking.scheduledAt,
@@ -542,7 +573,7 @@ export default function AdminBookings() {
             <input
               className="input-dark"
               type="text"
-              placeholder="Cari nama, pickup, tujuan, driver, plat..."
+              placeholder="Cari nama, layanan, pickup, tujuan, driver, plat..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
@@ -622,7 +653,7 @@ export default function AdminBookings() {
                 >
                   <div style={{ display: "grid", gap: "8px" }}>
                     <div style={{ fontSize: "18px", fontWeight: 900 }}>
-                      {booking.serviceType} • {formatRupiah(booking.finalPrice)}
+                      {formatServiceLabel(booking.serviceType)} • {formatRupiah(booking.finalPrice)}
                     </div>
 
                     <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
@@ -642,6 +673,20 @@ export default function AdminBookings() {
                     <div style={{ color: "#bdbdbd" }}>
                       Telepon:{" "}
                       <strong style={{ color: "#fff" }}>{booking.user?.phone || "-"}</strong>
+                    </div>
+
+                    <div style={{ color: "#bdbdbd" }}>
+                      Layanan:{" "}
+                      <strong style={{ color: "#fff" }}>
+                        {formatServiceLabel(booking.serviceType)}
+                      </strong>
+                    </div>
+
+                    <div style={{ color: "#bdbdbd" }}>
+                      Jenis Kendaraan:{" "}
+                      <strong style={{ color: "#fff" }}>
+                        {formatVehicleLabel(booking.vehicleType)}
+                      </strong>
                     </div>
 
                     <div style={{ color: "#bdbdbd" }}>
@@ -721,7 +766,7 @@ export default function AdminBookings() {
                     </div>
                     <div>Nama: {booking.driverName || "-"}</div>
                     <div>Telepon: {booking.driverPhone || "-"}</div>
-                    <div>Kendaraan: {booking.vehicleName || "-"}</div>
+                    <div>Kendaraan Driver: {booking.vehicleName || "-"}</div>
                     <div>Plat Nomor: {booking.plateNumber || "-"}</div>
                   </div>
 
@@ -789,6 +834,16 @@ export default function AdminBookings() {
           <>
             <div style={{ color: "#bdbdbd", lineHeight: 1.7 }}>
               Booking: <strong style={{ color: "#fff" }}>{assignModalBooking.id}</strong>
+              <br />
+              Layanan:{" "}
+              <strong style={{ color: "#fff" }}>
+                {formatServiceLabel(assignModalBooking.serviceType)}
+              </strong>
+              <br />
+              Jenis Kendaraan:{" "}
+              <strong style={{ color: "#fff" }}>
+                {formatVehicleLabel(assignModalBooking.vehicleType)}
+              </strong>
               <br />
               Tipe Booking:{" "}
               <strong style={{ color: "#fff" }}>
@@ -883,6 +938,16 @@ export default function AdminBookings() {
           <>
             <div style={{ color: "#bdbdbd", lineHeight: 1.7 }}>
               Booking: <strong style={{ color: "#fff" }}>{statusModalBooking.id}</strong>
+              <br />
+              Layanan:{" "}
+              <strong style={{ color: "#fff" }}>
+                {formatServiceLabel(statusModalBooking.serviceType)}
+              </strong>
+              <br />
+              Jenis Kendaraan:{" "}
+              <strong style={{ color: "#fff" }}>
+                {formatVehicleLabel(statusModalBooking.vehicleType)}
+              </strong>
               <br />
               Tipe Booking:{" "}
               <strong style={{ color: "#fff" }}>
