@@ -23,7 +23,7 @@ function Modal({ open, title, children, onClose }) {
         className="card-dark"
         style={{
           width: "100%",
-          maxWidth: "640px",
+          maxWidth: "720px",
           padding: "22px",
           borderRadius: "22px",
           display: "grid",
@@ -36,6 +36,7 @@ function Modal({ open, title, children, onClose }) {
             justifyContent: "space-between",
             gap: "12px",
             alignItems: "center",
+            flexWrap: "wrap",
           }}
         >
           <div style={{ fontSize: "22px", fontWeight: 900 }}>{title}</div>
@@ -49,6 +50,55 @@ function Modal({ open, title, children, onClose }) {
   );
 }
 
+function formatServiceLabel(serviceType) {
+  switch (serviceType) {
+    case "TAXI":
+      return "Taksi";
+    case "BIKE":
+      return "Ojek";
+    case "DELIVERY":
+      return "Delivery";
+    default:
+      return serviceType || "-";
+  }
+}
+
+function formatVehicleLabel(vehicleType) {
+  switch (vehicleType) {
+    case "CAR4":
+      return "Mobil 4 Penumpang";
+    case "CAR6":
+      return "Mobil 6 Penumpang";
+    case "PREMIUM":
+      return "Premium";
+    default:
+      return "-";
+  }
+}
+
+const serviceOptions = [
+  { value: "TAXI", label: "Taksi" },
+  { value: "BIKE", label: "Ojek" },
+  { value: "DELIVERY", label: "Delivery" },
+];
+
+const vehicleOptions = [
+  { value: "CAR4", label: "Mobil 4 Penumpang" },
+  { value: "CAR6", label: "Mobil 6 Penumpang" },
+  { value: "PREMIUM", label: "Premium" },
+];
+
+const darkSelectStyle = {
+  backgroundColor: "rgba(18,18,18,0.96)",
+  color: "#ffffff",
+  border: "1px solid rgba(255,255,255,0.12)",
+};
+
+const darkOptionStyle = {
+  backgroundColor: "#111111",
+  color: "#ffffff",
+};
+
 const initialCreateForm = {
   name: "",
   email: "",
@@ -56,6 +106,8 @@ const initialCreateForm = {
   phone: "",
   vehicleName: "",
   plateNumber: "",
+  serviceType: "TAXI",
+  vehicleType: "CAR4",
   notes: "",
 };
 
@@ -65,6 +117,8 @@ const initialEditForm = {
   phone: "",
   vehicleName: "",
   plateNumber: "",
+  serviceType: "TAXI",
+  vehicleType: "CAR4",
   notes: "",
   userId: "",
 };
@@ -141,6 +195,8 @@ export default function AdminDrivers() {
       phone: driver.phone || "",
       vehicleName: driver.vehicleName || "",
       plateNumber: driver.plateNumber || "",
+      serviceType: driver.serviceType || "TAXI",
+      vehicleType: driver.vehicleType || "CAR4",
       notes: driver.notes || "",
       userId: driver.userId || "",
     });
@@ -148,17 +204,41 @@ export default function AdminDrivers() {
   }
 
   function handleCreateChange(field, value) {
-    setCreateForm((prev) => ({
-      ...prev,
-      [field]: value,
-    }));
+    setCreateForm((prev) => {
+      const next = {
+        ...prev,
+        [field]: value,
+      };
+
+      if (field === "serviceType" && value !== "TAXI") {
+        next.vehicleType = "";
+      }
+
+      if (field === "serviceType" && value === "TAXI" && !prev.vehicleType) {
+        next.vehicleType = "CAR4";
+      }
+
+      return next;
+    });
   }
 
   function handleEditChange(field, value) {
-    setEditForm((prev) => ({
-      ...prev,
-      [field]: value,
-    }));
+    setEditForm((prev) => {
+      const next = {
+        ...prev,
+        [field]: value,
+      };
+
+      if (field === "serviceType" && value !== "TAXI") {
+        next.vehicleType = "";
+      }
+
+      if (field === "serviceType" && value === "TAXI" && !prev.vehicleType) {
+        next.vehicleType = "CAR4";
+      }
+
+      return next;
+    });
   }
 
   async function handleCreateDriverAccount(e) {
@@ -169,13 +249,19 @@ export default function AdminDrivers() {
       setErrorMessage("");
       setSuccessMessage("");
 
+      const payload = {
+        ...createForm,
+        vehicleType:
+          createForm.serviceType === "TAXI" ? createForm.vehicleType : null,
+      };
+
       const response = await fetch(buildApiUrl("/admin/drivers/create-account"), {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(createForm),
+        body: JSON.stringify(payload),
       });
 
       const result = await response.json();
@@ -214,6 +300,9 @@ export default function AdminDrivers() {
           phone: editForm.phone,
           vehicleName: editForm.vehicleName,
           plateNumber: editForm.plateNumber,
+          serviceType: editForm.serviceType,
+          vehicleType:
+            editForm.serviceType === "TAXI" ? editForm.vehicleType : null,
           notes: editForm.notes,
           userId: editForm.userId || null,
         }),
@@ -283,6 +372,10 @@ export default function AdminDrivers() {
         driver.vehicleName,
         driver.plateNumber,
         driver.notes,
+        driver.serviceType,
+        driver.vehicleType,
+        formatServiceLabel(driver.serviceType),
+        formatVehicleLabel(driver.vehicleType),
         driver.user?.email,
         driver.user?.name,
       ]
@@ -331,7 +424,7 @@ export default function AdminDrivers() {
             <input
               className="input-dark"
               type="text"
-              placeholder="Cari nama, email, kendaraan, plat nomor..."
+              placeholder="Cari nama, email, layanan, kendaraan, plat nomor..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
@@ -430,10 +523,26 @@ export default function AdminDrivers() {
                   <div style={{ color: "#bdbdbd" }}>
                     Telepon: <strong style={{ color: "#fff" }}>{driver.phone || "-"}</strong>
                   </div>
+
                   <div style={{ color: "#bdbdbd" }}>
-                    Kendaraan:{" "}
+                    Layanan:{" "}
+                    <strong style={{ color: "#fff" }}>
+                      {formatServiceLabel(driver.serviceType)}
+                    </strong>
+                  </div>
+
+                  <div style={{ color: "#bdbdbd" }}>
+                    Jenis Kendaraan:{" "}
+                    <strong style={{ color: "#fff" }}>
+                      {formatVehicleLabel(driver.vehicleType)}
+                    </strong>
+                  </div>
+
+                  <div style={{ color: "#bdbdbd" }}>
+                    Nama Kendaraan:{" "}
                     <strong style={{ color: "#fff" }}>{driver.vehicleName || "-"}</strong>
                   </div>
+
                   <div style={{ color: "#bdbdbd" }}>
                     Plat Nomor:{" "}
                     <strong style={{ color: "#fff" }}>{driver.plateNumber || "-"}</strong>
@@ -603,6 +712,54 @@ export default function AdminDrivers() {
           >
             <div>
               <label style={{ display: "block", marginBottom: 8, fontSize: 13, color: "#bdbdbd" }}>
+                Layanan
+              </label>
+              <select
+                className="input-dark"
+                value={createForm.serviceType}
+                onChange={(e) => handleCreateChange("serviceType", e.target.value)}
+                style={darkSelectStyle}
+              >
+                {serviceOptions.map((option) => (
+                  <option key={option.value} value={option.value} style={darkOptionStyle}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label style={{ display: "block", marginBottom: 8, fontSize: 13, color: "#bdbdbd" }}>
+                Jenis Kendaraan
+              </label>
+              <select
+                className="input-dark"
+                value={createForm.serviceType === "TAXI" ? createForm.vehicleType : ""}
+                onChange={(e) => handleCreateChange("vehicleType", e.target.value)}
+                disabled={createForm.serviceType !== "TAXI"}
+                style={darkSelectStyle}
+              >
+                <option value="" style={darkOptionStyle}>
+                  Pilih jenis kendaraan
+                </option>
+                {vehicleOptions.map((option) => (
+                  <option key={option.value} value={option.value} style={darkOptionStyle}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+              gap: "12px",
+            }}
+          >
+            <div>
+              <label style={{ display: "block", marginBottom: 8, fontSize: 13, color: "#bdbdbd" }}>
                 Nama Kendaraan
               </label>
               <input
@@ -620,7 +777,9 @@ export default function AdminDrivers() {
               <input
                 className="input-dark"
                 value={createForm.plateNumber}
-                onChange={(e) => handleCreateChange("plateNumber", e.target.value.toUpperCase())}
+                onChange={(e) =>
+                  handleCreateChange("plateNumber", e.target.value.toUpperCase())
+                }
                 required
               />
             </div>
@@ -699,6 +858,54 @@ export default function AdminDrivers() {
           >
             <div>
               <label style={{ display: "block", marginBottom: 8, fontSize: 13, color: "#bdbdbd" }}>
+                Layanan
+              </label>
+              <select
+                className="input-dark"
+                value={editForm.serviceType}
+                onChange={(e) => handleEditChange("serviceType", e.target.value)}
+                style={darkSelectStyle}
+              >
+                {serviceOptions.map((option) => (
+                  <option key={option.value} value={option.value} style={darkOptionStyle}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label style={{ display: "block", marginBottom: 8, fontSize: 13, color: "#bdbdbd" }}>
+                Jenis Kendaraan
+              </label>
+              <select
+                className="input-dark"
+                value={editForm.serviceType === "TAXI" ? editForm.vehicleType : ""}
+                onChange={(e) => handleEditChange("vehicleType", e.target.value)}
+                disabled={editForm.serviceType !== "TAXI"}
+                style={darkSelectStyle}
+              >
+                <option value="" style={darkOptionStyle}>
+                  Pilih jenis kendaraan
+                </option>
+                {vehicleOptions.map((option) => (
+                  <option key={option.value} value={option.value} style={darkOptionStyle}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+              gap: "12px",
+            }}
+          >
+            <div>
+              <label style={{ display: "block", marginBottom: 8, fontSize: 13, color: "#bdbdbd" }}>
                 Nama Kendaraan
               </label>
               <input
@@ -716,7 +923,9 @@ export default function AdminDrivers() {
               <input
                 className="input-dark"
                 value={editForm.plateNumber}
-                onChange={(e) => handleEditChange("plateNumber", e.target.value.toUpperCase())}
+                onChange={(e) =>
+                  handleEditChange("plateNumber", e.target.value.toUpperCase())
+                }
                 required
               />
             </div>

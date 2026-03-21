@@ -26,6 +26,37 @@ function normalizePlateNumber(value) {
   return normalizeRequiredString(value, "Plat nomor").toUpperCase();
 }
 
+function normalizeServiceType(value) {
+  const safeValue = normalizeRequiredString(value, "Layanan").toUpperCase();
+  const allowed = ["TAXI", "BIKE", "DELIVERY"];
+
+  if (!allowed.includes(safeValue)) {
+    throw new Error("Layanan driver tidak valid");
+  }
+
+  return safeValue;
+}
+
+function normalizeVehicleType(value, serviceType) {
+  const safeValue = normalizeOptionalString(value)?.toUpperCase() || null;
+
+  if (serviceType !== "TAXI") {
+    return null;
+  }
+
+  if (!safeValue) {
+    throw new Error("Jenis kendaraan wajib diisi untuk layanan TAXI");
+  }
+
+  const allowed = ["CAR4", "CAR6", "PREMIUM"];
+
+  if (!allowed.includes(safeValue)) {
+    throw new Error("Jenis kendaraan driver tidak valid");
+  }
+
+  return safeValue;
+}
+
 function formatDriver(driver) {
   return {
     id: driver.id,
@@ -34,6 +65,8 @@ function formatDriver(driver) {
     phone: driver.phone,
     vehicleName: driver.vehicleName,
     plateNumber: driver.plateNumber,
+    serviceType: driver.serviceType,
+    vehicleType: driver.vehicleType,
     isActive: driver.isActive,
     notes: driver.notes,
     createdAt: driver.createdAt,
@@ -139,6 +172,8 @@ router.post(
         phone,
         vehicleName,
         plateNumber,
+        serviceType,
+        vehicleType,
         notes,
       } = req.body || {};
 
@@ -151,6 +186,11 @@ router.post(
         "Nama kendaraan"
       );
       const safePlateNumber = normalizePlateNumber(plateNumber);
+      const safeServiceType = normalizeServiceType(serviceType);
+      const safeVehicleType = normalizeVehicleType(
+        vehicleType,
+        safeServiceType
+      );
       const safeNotes = normalizeOptionalString(notes);
 
       if (safePassword.length < 6) {
@@ -204,6 +244,8 @@ router.post(
             phone: safePhone,
             vehicleName: safeVehicleName,
             plateNumber: safePlateNumber,
+            serviceType: safeServiceType,
+            vehicleType: safeVehicleType,
             isActive: true,
             notes: safeNotes,
           },
@@ -231,8 +273,16 @@ router.post(
 
 router.post("/admin/drivers", requireAuth, requireAdmin, async (req, res) => {
   try {
-    const { name, phone, vehicleName, plateNumber, notes, userId } =
-      req.body || {};
+    const {
+      name,
+      phone,
+      vehicleName,
+      plateNumber,
+      serviceType,
+      vehicleType,
+      notes,
+      userId,
+    } = req.body || {};
 
     const safeName = normalizeRequiredString(name, "Nama driver");
     const safePhone = normalizeOptionalString(phone);
@@ -241,6 +291,11 @@ router.post("/admin/drivers", requireAuth, requireAdmin, async (req, res) => {
       "Nama kendaraan"
     );
     const safePlateNumber = normalizePlateNumber(plateNumber);
+    const safeServiceType = normalizeServiceType(serviceType);
+    const safeVehicleType = normalizeVehicleType(
+      vehicleType,
+      safeServiceType
+    );
     const safeNotes = normalizeOptionalString(notes);
     const safeUserId = normalizeOptionalString(userId);
 
@@ -292,6 +347,8 @@ router.post("/admin/drivers", requireAuth, requireAdmin, async (req, res) => {
         phone: safePhone,
         vehicleName: safeVehicleName,
         plateNumber: safePlateNumber,
+        serviceType: safeServiceType,
+        vehicleType: safeVehicleType,
         notes: safeNotes,
         userId: safeUserId,
         isActive: true,
@@ -317,8 +374,16 @@ router.post("/admin/drivers", requireAuth, requireAdmin, async (req, res) => {
 router.put("/admin/drivers/:id", requireAuth, requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, phone, vehicleName, plateNumber, notes, userId } =
-      req.body || {};
+    const {
+      name,
+      phone,
+      vehicleName,
+      plateNumber,
+      serviceType,
+      vehicleType,
+      notes,
+      userId,
+    } = req.body || {};
 
     const existing = await prisma.driver.findUnique({
       where: { id },
@@ -338,6 +403,11 @@ router.put("/admin/drivers/:id", requireAuth, requireAdmin, async (req, res) => 
       "Nama kendaraan"
     );
     const safePlateNumber = normalizePlateNumber(plateNumber);
+    const safeServiceType = normalizeServiceType(serviceType);
+    const safeVehicleType = normalizeVehicleType(
+      vehicleType,
+      safeServiceType
+    );
     const safeNotes = normalizeOptionalString(notes);
     const safeUserId = normalizeOptionalString(userId);
 
@@ -396,6 +466,8 @@ router.put("/admin/drivers/:id", requireAuth, requireAdmin, async (req, res) => 
         phone: safePhone,
         vehicleName: safeVehicleName,
         plateNumber: safePlateNumber,
+        serviceType: safeServiceType,
+        vehicleType: safeVehicleType,
         notes: safeNotes,
         userId: safeUserId,
       },
