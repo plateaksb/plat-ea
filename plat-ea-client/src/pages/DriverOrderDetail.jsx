@@ -32,6 +32,58 @@ function normalizePhoneToWa(phone) {
   return cleaned;
 }
 
+function getScheduledAlertInfo(isScheduled, scheduledAt) {
+  if (!isScheduled || !scheduledAt) return null;
+
+  const targetTime = new Date(scheduledAt).getTime();
+  if (Number.isNaN(targetTime)) return null;
+
+  const diffMs = targetTime - Date.now();
+  const diffMinutes = Math.round(diffMs / 60000);
+
+  if (diffMinutes > 60) {
+    return {
+      label: `Jemput ${diffMinutes} menit lagi`,
+      style: {
+        backgroundColor: "rgba(255,255,255,0.06)",
+        border: "1px solid rgba(255,255,255,0.08)",
+        color: "#e5e5e5",
+      },
+    };
+  }
+
+  if (diffMinutes > 30) {
+    return {
+      label: `Siaga • ${diffMinutes} menit lagi`,
+      style: {
+        backgroundColor: "rgba(234,179,8,0.14)",
+        border: "1px solid rgba(234,179,8,0.28)",
+        color: "#fde68a",
+      },
+    };
+  }
+
+  if (diffMinutes >= 0) {
+    return {
+      label: `Segera jemput • ${diffMinutes} menit lagi`,
+      style: {
+        backgroundColor: "rgba(249,115,22,0.16)",
+        border: "1px solid rgba(249,115,22,0.30)",
+        color: "#fdba74",
+      },
+    };
+  }
+
+  return {
+    label: `Lewat jadwal • ${Math.abs(diffMinutes)} menit`,
+    style: {
+      backgroundColor: "rgba(239,68,68,0.16)",
+      border: "1px solid rgba(239,68,68,0.30)",
+      color: "#fecaca",
+    },
+  };
+}
+
 function getStatusBadgeStyle(status) {
   const base = {
     display: "inline-block",
@@ -116,6 +168,8 @@ export default function DriverOrderDetail() {
   const [actionLoading, setActionLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+
+  const scheduledAlert = getScheduledAlertInfo(order?.isScheduled, order?.scheduledAt);
 
   async function fetchOrder() {
     const response = await fetch(buildApiUrl(`/driver/bookings/${id}`), {
@@ -365,6 +419,20 @@ export default function DriverOrderDetail() {
               <strong style={{ color: "#fff" }}>
                 {formatDateTime(order.scheduledAt)}
               </strong>
+            </div>
+          )}
+          {scheduledAlert && (
+            <div
+              style={{
+                marginTop: "4px",
+                padding: "10px 12px",
+                borderRadius: "14px",
+                fontSize: "13px",
+                fontWeight: 700,
+                ...scheduledAlert.style,
+              }}
+            >
+              {scheduledAlert.label}
             </div>
           )}
         </DetailCard>

@@ -19,6 +19,58 @@ function formatDateTime(value) {
   });
 }
 
+function getScheduledAlertInfo(isScheduled, scheduledAt) {
+  if (!isScheduled || !scheduledAt) return null;
+
+  const targetTime = new Date(scheduledAt).getTime();
+  if (Number.isNaN(targetTime)) return null;
+
+  const diffMs = targetTime - Date.now();
+  const diffMinutes = Math.round(diffMs / 60000);
+
+  if (diffMinutes > 60) {
+    return {
+      label: `Jemput ${diffMinutes} menit lagi`,
+      style: {
+        backgroundColor: "rgba(255,255,255,0.06)",
+        border: "1px solid rgba(255,255,255,0.08)",
+        color: "#e5e5e5",
+      },
+    };
+  }
+
+  if (diffMinutes > 30) {
+    return {
+      label: `Siaga • ${diffMinutes} menit lagi`,
+      style: {
+        backgroundColor: "rgba(234,179,8,0.14)",
+        border: "1px solid rgba(234,179,8,0.28)",
+        color: "#fde68a",
+      },
+    };
+  }
+
+  if (diffMinutes >= 0) {
+    return {
+      label: `Segera jemput • ${diffMinutes} menit lagi`,
+      style: {
+        backgroundColor: "rgba(249,115,22,0.16)",
+        border: "1px solid rgba(249,115,22,0.30)",
+        color: "#fdba74",
+      },
+    };
+  }
+
+  return {
+    label: `Lewat jadwal • ${Math.abs(diffMinutes)} menit`,
+    style: {
+      backgroundColor: "rgba(239,68,68,0.16)",
+      border: "1px solid rgba(239,68,68,0.30)",
+      color: "#fecaca",
+    },
+  };
+}
+
 function getStatusBadgeStyle(status) {
   const base = {
     display: "inline-block",
@@ -93,12 +145,9 @@ function StatCard({ label, value }) {
   );
 }
 
-function DriverOrderCard({
-  order,
-  actionLoadingId,
-  onStart,
-  onComplete,
-}) {
+function DriverOrderCard({ order, actionLoadingId, onStart, onComplete }) {
+  const scheduledAlert = getScheduledAlertInfo(order.isScheduled, order.scheduledAt);
+
   return (
     <div
       className="card-dark"
@@ -160,6 +209,20 @@ function DriverOrderCard({
               <strong style={{ color: "#fff" }}>
                 {formatDateTime(order.scheduledAt)}
               </strong>
+            </div>
+          )}
+
+          {scheduledAlert && (
+            <div
+              style={{
+                padding: "10px 12px",
+                borderRadius: "14px",
+                fontSize: "13px",
+                fontWeight: 700,
+                ...scheduledAlert.style,
+              }}
+            >
+              {scheduledAlert.label}
             </div>
           )}
         </div>
@@ -419,7 +482,14 @@ export default function DriverDashboard() {
           border: "1px solid rgba(255,255,255,0.08)",
         }}
       >
-        <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            gap: "12px",
+            flexWrap: "wrap",
+          }}
+        >
           <div>
             <div style={{ fontSize: "24px", fontWeight: 900 }}>
               Halo, {driver?.name || "Driver"}
