@@ -68,6 +68,20 @@ function getStatusBadgeStyle(status) {
   }
 }
 
+function getScheduleBadgeStyle(isScheduled) {
+  return {
+    display: "inline-block",
+    padding: "6px 10px",
+    borderRadius: "999px",
+    fontSize: "12px",
+    fontWeight: 700,
+    backgroundColor: isScheduled
+      ? "rgba(249,115,22,0.16)"
+      : "rgba(255,255,255,0.08)",
+    color: isScheduled ? "#fdba74" : "#d4d4d4",
+  };
+}
+
 function MiniStat({ label, value }) {
   return (
     <div
@@ -122,8 +136,11 @@ function DriverOrderCard({
             {order.serviceType} • {formatRupiah(order.finalPrice)}
           </div>
 
-          <div>
+          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
             <span style={getStatusBadgeStyle(order.status)}>{order.status}</span>
+            <span style={getScheduleBadgeStyle(order.isScheduled)}>
+              {order.isScheduled ? "TERJADWAL" : "LANGSUNG"}
+            </span>
           </div>
 
           <div style={{ color: "#bdbdbd" }}>
@@ -135,6 +152,22 @@ function DriverOrderCard({
             Telepon:{" "}
             <strong style={{ color: "#fff" }}>{order.user?.phone || "-"}</strong>
           </div>
+
+          <div style={{ color: "#bdbdbd" }}>
+            Tipe Booking:{" "}
+            <strong style={{ color: "#fff" }}>
+              {order.isScheduled ? "Terjadwal" : "Langsung"}
+            </strong>
+          </div>
+
+          {order.isScheduled && (
+            <div style={{ color: "#bdbdbd" }}>
+              Jadwal Jemput:{" "}
+              <strong style={{ color: "#fff" }}>
+                {formatDateTime(order.scheduledAt)}
+              </strong>
+            </div>
+          )}
         </div>
 
         <div style={{ textAlign: "right", display: "grid", gap: "8px" }}>
@@ -253,10 +286,10 @@ export default function DriverOrders() {
   }
 
   useEffect(() => {
-  if (token) {
-    refreshData(false, activeTab);
-  }
-}, [token, activeTab]);
+    if (token) {
+      refreshData(false, activeTab);
+    }
+  }, [token, activeTab]);
 
   async function handleStartOrder(id) {
     try {
@@ -329,6 +362,8 @@ export default function DriverOrders() {
           order.user?.phone,
           order.serviceType,
           order.status,
+          order.isScheduled ? "terjadwal" : "langsung",
+          order.scheduledAt,
         ]
           .filter(Boolean)
           .some((value) => String(value).toLowerCase().includes(q))

@@ -75,6 +75,20 @@ function getStatusBadgeStyle(status) {
   }
 }
 
+function getScheduleBadgeStyle(isScheduled) {
+  return {
+    display: "inline-block",
+    padding: "6px 10px",
+    borderRadius: "999px",
+    fontSize: "12px",
+    fontWeight: 700,
+    backgroundColor: isScheduled
+      ? "rgba(249,115,22,0.16)"
+      : "rgba(255,255,255,0.08)",
+    color: isScheduled ? "#fdba74" : "#d4d4d4",
+  };
+}
+
 function DetailCard({ title, children }) {
   return (
     <div
@@ -139,10 +153,10 @@ export default function DriverOrderDetail() {
   }
 
   useEffect(() => {
-  if (token && id) {
-    refreshData();
-  }
-}, [token, id]);
+    if (token && id) {
+      refreshData();
+    }
+  }, [token, id]);
 
   async function handleStart() {
     try {
@@ -265,8 +279,12 @@ export default function DriverOrderDetail() {
             <div style={{ fontSize: "24px", fontWeight: 900 }}>
               {order.serviceType} • {formatRupiah(order.finalPrice)}
             </div>
-            <div>
+
+            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
               <span style={getStatusBadgeStyle(order.status)}>{order.status}</span>
+              <span style={getScheduleBadgeStyle(order.isScheduled)}>
+                {order.isScheduled ? "TERJADWAL" : "LANGSUNG"}
+              </span>
             </div>
           </div>
 
@@ -335,6 +353,20 @@ export default function DriverOrderDetail() {
             Dibuat:{" "}
             <strong style={{ color: "#fff" }}>{formatDateTime(order.createdAt)}</strong>
           </div>
+          <div style={{ color: "#bdbdbd" }}>
+            Tipe Booking:{" "}
+            <strong style={{ color: "#fff" }}>
+              {order.isScheduled ? "Terjadwal" : "Langsung"}
+            </strong>
+          </div>
+          {order.isScheduled && (
+            <div style={{ color: "#bdbdbd" }}>
+              Jadwal Jemput:{" "}
+              <strong style={{ color: "#fff" }}>
+                {formatDateTime(order.scheduledAt)}
+              </strong>
+            </div>
+          )}
         </DetailCard>
 
         <DetailCard title="Pelanggan">
